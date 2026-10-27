@@ -493,6 +493,7 @@ export ANTHROPIC_API_KEY="你在看板设置中添加并绑定的API_Key"
 
 ### Unreleased
 
+- **可选代理健康检查与自动切换**：定时轻量探测、请求异常触发复检、连续失败与双地址确认、独立备用探测端口、跨槽位实际出口 IP 去重及切换冷却；无合格备用时暂停该槽位的新请求，保留账号绑定。面板可配置并查看状态与切换记录，默认关闭。详见 [代理健康检查](docs/PROXY_HEALTH.md)。 / Opt-in proxy monitoring and serialized failover with periodic and error-triggered checks, dual-endpoint confirmation, a dedicated spare listener, exit-IP uniqueness, cooldowns and fail-closed dispatch. Configure and inspect status/history in the panel; disabled by default.
 - **修复导入代理槽后被轮询清空**：自动发现出口并点击导入后立即标记未保存，保留新槽位及出口信息，直到用户保存；仍不自动修改账号绑定。 / Keep discovered proxy-slot imports and probe metadata through background polling until saved, without changing account bindings.
 - **修复 Qoder 签到活动名称报错**：代理上下文只包装账号实例方法，保留静态 / 类方法描述符，避免领取流程出现 `campaign_label() takes 1 positional argument but 2 were given`；没有可领取活动时继续如实返回零新增积分。 / Preserve static and class method descriptors when adding account proxy context, fixing the Qoder check-in argument error without treating unavailable rewards as credits earned.
 - **修复平台切换后的导航回跳**：选择 Qoder 后，网关、账号、任务与福利、数据看板和运行日志均打开 Qoder 页面；平台与页面可随刷新恢复，共享设置继续统一管理 Key。/ Keep all provider pages on Qoder after platform selection, persist platform/page across refreshes, and retain shared key settings.
@@ -628,4 +629,4 @@ PR 贡献者（v1.4.5 之前的改动未进上方更新记录，这里一并列�
 1. 本项目为非官方自托管网关，仅供技术研究、逆向协议学习与个人合法授权账号在私有环境测试使用。
 2. 本项目不提供任何账号及额度。请严格遵守官方服务条款，禁止用于任何商业转售、恶意并发或违规滥用。
 
-当前个人分支测试矩阵：228 个套件：168 个 Python + 60 个 JS。
+当前个人分支测试矩阵：229 个套件：169 个 Python + 60 个 JS。

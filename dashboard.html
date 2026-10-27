@@ -1495,6 +1495,23 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
   var ATTRS = ['title', 'placeholder', 'aria-label', 'data-label', 'alt'];
   var SKIP = {SCRIPT: 1, STYLE: 1, TEXTAREA: 1, NOSCRIPT: 1};
   var DICT = {
+    "代理健康检查与自动切换": "Proxy health checks and failover",
+    "仅在确认出口故障后切换；按实际 IP 去重，备用不足时暂停该槽位，账号绑定保持不变。": "Switch only after confirming an exit failure; deduplicate actual IPs and pause slots without a spare. Account bindings stay fixed.",
+    "启用代理健康检查": "Enable proxy health checks",
+    "允许跨国家切换": "Allow country changes",
+    "检查间隔（秒）": "Check interval (seconds)",
+    "连续失败阈值": "Consecutive failure threshold",
+    "切换冷却（秒）": "Switch cooldown (seconds)",
+    "探测超时（秒）": "Probe timeout (seconds)",
+    "每轮备用节点上限": "Candidate limit per check",
+    "Mihomo 控制地址": "Mihomo controller URL",
+    "独立探测代理": "Dedicated probe proxy",
+    "独立探测组": "Dedicated probe group",
+    "槽位与 Mihomo 组映射（每行 槽位ID=代理组名称）": "Slot to Mihomo group mapping (one slot ID=group name per line)",
+    "控制密钥仅保存在服务器 accounts/proxy-health/secret 文件，面板不显示密钥。": "Store the controller secret in accounts/proxy-health/secret on the server. It is never shown in the panel.",
+    "保存健康检查配置": "Save health check configuration",
+    "立即检查代理": "Check proxies now",
+    "代理切换记录": "Proxy failover history",
     '正在加载 Qoder 管理界面…': 'Loading Qoder management…',
     'Qoder 的签到与福利位于账号页，是否可用取决于账号版本。': 'Qoder check-in and benefits are on the accounts page; availability depends on the account region.',
     'Qoder 管理界面未就绪，请重试。': 'Qoder management is not ready. Please retry.',
@@ -2840,6 +2857,23 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     '猫猫正在旅行途中，请稍后再来查看！': 'The cat is still travelling; check again later!'
   };
   var HANT_PHRASES = {
+    "代理健康检查与自动切换": "代理健康檢查與自動切換",
+    "仅在确认出口故障后切换；按实际 IP 去重，备用不足时暂停该槽位，账号绑定保持不变。": "僅在確認出口故障後切換；按實際 IP 去重，備用不足時暫停該槽位，帳號繫結保持不變。",
+    "启用代理健康检查": "啟用代理健康檢查",
+    "允许跨国家切换": "允許跨國家切換",
+    "检查间隔（秒）": "檢查間隔（秒）",
+    "连续失败阈值": "連續失敗閾值",
+    "切换冷却（秒）": "切換冷卻（秒）",
+    "探测超时（秒）": "探測逾時（秒）",
+    "每轮备用节点上限": "每輪備用節點上限",
+    "Mihomo 控制地址": "Mihomo 控制位址",
+    "独立探测代理": "獨立探測代理",
+    "独立探测组": "獨立探測組",
+    "槽位与 Mihomo 组映射（每行 槽位ID=代理组名称）": "槽位與 Mihomo 組映射（每行 槽位ID=代理組名稱）",
+    "控制密钥仅保存在服务器 accounts/proxy-health/secret 文件，面板不显示密钥。": "控制金鑰僅保存在伺服器 accounts/proxy-health/secret 檔案，面板不顯示金鑰。",
+    "保存健康检查配置": "儲存健康檢查設定",
+    "立即检查代理": "立即檢查代理",
+    "代理切换记录": "代理切換記錄",
     '正在加载 Qoder 管理界面…': '正在載入 Qoder 管理介面…',
     'Qoder 的签到与福利位于账号页，是否可用取决于账号版本。': 'Qoder 的簽到與福利位於帳號頁，是否可用取決於帳號版本。',
     'Qoder 管理界面未就绪，请重试。': 'Qoder 管理介面尚未就緒，請重試。',
@@ -4894,6 +4928,30 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
       </div>
       <div id="slotList"></div>
       <div id="slotDiscover"></div>
+      <details style="margin-top:18px" id="proxyHealthDetails">
+        <summary>代理健康检查与自动切换</summary>
+        <p>仅在确认出口故障后切换；按实际 IP 去重，备用不足时暂停该槽位，账号绑定保持不变。</p>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin:12px 0">
+          <label><input type="checkbox" id="proxyHealthEnabled" onchange="PROXY_HEALTH_DIRTY=true"> 启用代理健康检查</label>
+          <label><input type="checkbox" id="proxyHealthCross" onchange="PROXY_HEALTH_DIRTY=true"> 允许跨国家切换</label>
+          <label>检查间隔（秒） <input id="proxyHealthInterval" type="number" min="30" max="3600" value="90" style="width:90px" oninput="PROXY_HEALTH_DIRTY=true"></label>
+          <label>连续失败阈值 <input id="proxyHealthFailures" type="number" min="2" max="10" value="3" style="width:70px" oninput="PROXY_HEALTH_DIRTY=true"></label>
+          <label>切换冷却（秒） <input id="proxyHealthCooldown" type="number" min="60" max="3600" value="600" style="width:90px" oninput="PROXY_HEALTH_DIRTY=true"></label>
+          <label>探测超时（秒） <input id="proxyHealthTimeout" type="number" min="2" max="15" value="5" style="width:70px" oninput="PROXY_HEALTH_DIRTY=true"></label>
+          <label>每轮备用节点上限 <input id="proxyHealthLimit" type="number" min="1" max="50" value="12" style="width:70px" oninput="PROXY_HEALTH_DIRTY=true"></label>
+        </div>
+        <label>Mihomo 控制地址 <input id="proxyHealthController" value="http://127.0.0.1:9090" oninput="PROXY_HEALTH_DIRTY=true"></label>
+        <label>独立探测代理 <input id="proxyHealthProbe" value="http://127.0.0.1:17990" oninput="PROXY_HEALTH_DIRTY=true"></label>
+        <label>独立探测组 <input id="proxyHealthGroup" value="Gateway spare probe" oninput="PROXY_HEALTH_DIRTY=true"></label>
+        <p>槽位与 Mihomo 组映射（每行 槽位ID=代理组名称）</p>
+        <textarea id="proxyHealthGroups" rows="4" style="width:100%;font-family:monospace" oninput="PROXY_HEALTH_DIRTY=true"></textarea>
+        <p>控制密钥仅保存在服务器 accounts/proxy-health/secret 文件，面板不显示密钥。</p>
+        <button class="sec" onclick="saveProxyHealth(this)">保存健康检查配置</button>
+        <button class="sec" onclick="checkProxyHealth(this)">立即检查代理</button>
+        <div id="proxyHealthState" role="status" style="margin:10px 0"></div>
+        <div id="proxyHealthRows"></div>
+        <details><summary>代理切换记录</summary><div id="proxyHealthHistory"></div></details>
+      </details>
     </section>
 
     <section>
@@ -14328,6 +14386,8 @@ let PROXY_SLOTS = [];
  * 置位期间跳过刷新，保存成功后清零。 */
 let SLOTS_DIRTY = false;
 let SLOT_DISCOVER = [];
+let PROXY_HEALTH_DIRTY = false;
+let PROXY_HEALTH_LOADING = false;
 
 function slotSelectHtml(a){
   const current = a.proxySlot || '';
@@ -14366,6 +14426,7 @@ async function setAccountSlot(uid, slotId, el){
 }
 
 async function loadProxySlots(force){
+  loadProxyHealth();
   // 编辑器有未保存改动时不动它：轮询与「切到设置页」都不该覆盖正在填的内容。
   if(SLOTS_DIRTY && !force) return;
   try{
@@ -14375,6 +14436,71 @@ async function loadProxySlots(force){
   }catch(e){
     // Panel not logged in yet; actions on the settings page surface errors.
   }
+}
+
+async function loadProxyHealth(){
+  if(PROXY_HEALTH_LOADING) return;
+  PROXY_HEALTH_LOADING = true;
+  try{
+    const data = await getJSON('/proxy/health');
+    const cfg = data.config || {};
+    if(!PROXY_HEALTH_DIRTY){
+      document.getElementById('proxyHealthEnabled').checked = !!cfg.enabled;
+      document.getElementById('proxyHealthCross').checked = !!cfg.allow_cross_country;
+      [['Interval','interval'],['Failures','failures'],['Cooldown','cooldown'],['Timeout','timeout'],
+       ['Limit','candidate_limit'],['Controller','controller'],['Probe','probe_proxy'],['Group','probe_group']]
+        .forEach(([id,key]) => { document.getElementById('proxyHealth'+id).value = cfg[key] == null ? '' : cfg[key]; });
+      document.getElementById('proxyHealthGroups').value = Object.entries(cfg.groups || {}).map(([k,v]) => k+'='+v).join('\n');
+    }
+    document.getElementById('proxyHealthState').textContent = (cfg.enabled ? 'enabled' : 'disabled')
+      + ' · ' + (data.running ? 'running' : 'stopped')
+      + ' · secret: ' + (data.secret_configured ? 'configured' : 'missing')
+      + (data.error ? ' · '+data.error : '');
+    document.getElementById('proxyHealthRows').innerHTML = Object.values(data.slots || {}).map(r =>
+      '<div class="mono" style="font-size:12px;padding:5px 0">'+esc(r.id)+' · '+esc(r.node || '-')
+      +' · '+esc(r.ip || '-')+' · '+esc(r.status || 'unknown')+' · failures: '+Number(r.failures || 0)
+      +' · '+esc(r.latency_ms == null ? '-' : r.latency_ms+'ms')
+      +' · '+esc(r.checked_at ? new Date(r.checked_at*1000).toLocaleString() : '-')
+      +' · '+esc(r.reason || '')+' '+esc(r.error || '')+'</div>').join('');
+    document.getElementById('proxyHealthHistory').innerHTML = (data.history || []).slice().reverse().map(r =>
+      '<div style="font-size:12px;padding:5px 0">'+esc(new Date(r.at*1000).toLocaleString())+' · '+esc(r.slot)
+      +' · '+esc(r.reason)+' · '+esc(r.old_node || '')+' → '+esc(r.node || '')
+      +' · '+esc(r.old_ip || '')+' → '+esc(r.ip || '')+'</div>').join('');
+  }catch(e){
+    const state = document.getElementById('proxyHealthState');
+    if(state) state.textContent = String(e.message || e);
+  }finally{ PROXY_HEALTH_LOADING = false; }
+}
+
+async function saveProxyHealth(btn){
+  btn.disabled = true;
+  try{
+    const groups = {};
+    document.getElementById('proxyHealthGroups').value.split('\n').filter(s => s.trim()).forEach(line => {
+      const at = line.indexOf('=');
+      if(at < 1 || !line.slice(at+1).trim()) throw new Error('slot=group');
+      const id = line.slice(0,at).trim();
+      if(groups[id]) throw new Error('duplicate slot: '+id);
+      groups[id] = line.slice(at+1).trim();
+    });
+    const body = {enabled:document.getElementById('proxyHealthEnabled').checked,
+                  allow_cross_country:document.getElementById('proxyHealthCross').checked,groups};
+    [['Interval','interval'],['Failures','failures'],['Cooldown','cooldown'],['Timeout','timeout'],['Limit','candidate_limit']]
+      .forEach(([id,key]) => { body[key] = Number(document.getElementById('proxyHealth'+id).value); });
+    [['Controller','controller'],['Probe','probe_proxy'],['Group','probe_group']]
+      .forEach(([id,key]) => { body[key] = document.getElementById('proxyHealth'+id).value.trim(); });
+    await postJSON('/proxy/health/config',body);
+    PROXY_HEALTH_DIRTY = false;
+    await loadProxyHealth();
+  }catch(e){ toast(String(e.message || e),'bad'); }
+  finally{ btn.disabled = false; }
+}
+
+async function checkProxyHealth(btn){
+  btn.disabled = true;
+  try{ await postJSON('/proxy/health/check',{}); await loadProxyHealth(); }
+  catch(e){ toast(String(e.message || e),'bad'); }
+  finally{ btn.disabled = false; }
 }
 
 /* 标题旁的状态提示。单独抽出来，是因为标记「未保存」时只能更新这段文字，

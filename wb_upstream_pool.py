@@ -799,8 +799,12 @@ def urlopen(req, timeout=30, proxy="", headers=None):
     # 池键按（目标, 代理串, 凭据）分：不同出口的账号绝不共用一条连接，即使代理
     # 地址相同、只是串写法不同（宁可多一条连接，也不赌两个出口是同一个）；同一
     # 出口上的不同账号也绝不共用（凭据摘要不同），见模块 docstring。
-    key = (scheme, host, port, proxy_raw,
-           _identity_discriminator(req, ordered_headers))
+    identity = _identity_discriminator(req, ordered_headers)
+    generation = getattr(req, 'wb_proxy_generation', 0)
+    if proxy_raw and generation:
+        # Existing streams finish, but new requests cannot reuse the old exit.
+        identity += ':exit-%s' % generation
+    key = (scheme, host, port, proxy_raw, identity)
 
     def factory():
         return _new_connection(scheme, host, port, proxy_info, timeout)

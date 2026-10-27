@@ -45,6 +45,8 @@ def main():
         os._exit(0)
     threading.Thread(target=parent_watchdog, daemon=True).start()
     proxy_path = Path(os.environ.pop('WB_QODER_PROXY_FILE'))
+    from wb_proxy_health import WorkerSignals, ProxyUnavailable, ObservedResponse
+    health = WorkerSignals(os.environ.pop('WB_PROXY_HEALTH_DIR'))
     context = threading.local()
     original_open = urllib.request.urlopen
     original_opener = accounts._opener_for_request
@@ -62,6 +64,8 @@ def main():
         value = mapping.get(uid, '')
         if value is None:
             raise RuntimeError('The assigned Qoder proxy slot is disabled or missing')
+        if value and not health.allow(value):
+            raise ProxyUnavailable('bound proxy slot is unavailable')
         return value
 
     def opener():
@@ -71,8 +75,17 @@ def main():
         value = account_proxy(uid)
         if not value:
             return original_opener()
-        return urllib.request.build_opener(urllib.request.ProxyHandler(
+        delegate = urllib.request.build_opener(urllib.request.ProxyHandler(
             {'http': value, 'https': value}))
+        class ObservedOpener:
+            def open(self, *args, **kwargs):
+                try:
+                    response = delegate.open(*args, **kwargs)
+                    return ObservedResponse(response, lambda exc: health.notify(value, exc))
+                except Exception as exc:
+                    health.notify(value, exc)
+                    raise
+        return ObservedOpener()
 
     def urlopen(request, *args, **kwargs):
         # COSY signing names the actual account, including after a retry switches it.
@@ -80,7 +93,12 @@ def main():
         if uid:
             context.uid = uid
         if getattr(context, 'uid', ''):
-            return opener().open(request, *args, **kwargs)
+            value = account_proxy(context.uid)
+            try:
+                return opener().open(request, *args, **kwargs)
+            except Exception as exc:
+                health.notify(value, exc)
+                raise
         return original_open(request, *args, **kwargs)
 
     # Refresh, quota, check-in and other background work all inherit the binding.
@@ -92,7 +110,7 @@ def main():
             return False
         try:
             account_proxy(self.uid)
-        except RuntimeError:
+        except (RuntimeError, ProxyUnavailable):
             return False
         return original_ready(self, *args, **kwargs)
 

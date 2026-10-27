@@ -2,6 +2,8 @@
 accounts/*.json
 accounts/agent-backups/
 accounts/qoder-state/
+# Proxy health runtime state, bounded worker signals and private controller secret.
+accounts/proxy-health/
 !accounts/README.txt
 
 # 运行时日志和用量统计

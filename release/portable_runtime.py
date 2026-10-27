@@ -71,6 +71,7 @@ DROP_SUFFIXES = (".pdb", ".pyc")
 # and their extension modules have to survive with them.
 REQUIRED_FILES = (
     "Lib/email/__init__.py",
+    "Lib/copy.py",
     "Lib/functools.py",
     "Lib/glob.py",
     "Lib/pathlib.py",
