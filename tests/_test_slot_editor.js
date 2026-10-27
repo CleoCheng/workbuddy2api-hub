@@ -18,10 +18,14 @@ const dom = require('./_dom_stub.js');
 
 // What the server would return for GET /proxy/slots; the test swaps it.
 let serverSlots = [];
+let health = {config:{enabled:false,interval:90,failures:3,cooldown:600,timeout:5,
+                     candidate_limit:12,groups:{}}, slots:{}, history:[]};
+let healthSaved;
 dom.installDom({
   confirm: () => true,
-  fetch: () => {
-    const payload = {current: 'intl', accounts: [], slots: serverSlots, data: [],
+  fetch: (url, options) => {
+    if(url === '/proxy/health/config') healthSaved = JSON.parse(options.body);
+    const payload = String(url).startsWith('/proxy/health') ? health : {current: 'intl', accounts: [], slots: serverSlots, data: [],
                      results: [], byAccount: []};
     return Promise.resolve({status: 200, ok: true,
       json: () => Promise.resolve(payload),
@@ -38,6 +42,9 @@ const api = new Function(script + `
     importDiscovered,
     discovered: rows => { SLOT_DISCOVER = rows; },
     saveProxySlots,
+    loadProxyHealth,
+    saveProxyHealth,
+    healthDirty: value => { PROXY_HEALTH_DIRTY = value; },
     rows: () => PROXY_SLOTS,
     dirty: () => SLOTS_DIRTY,
     state: () => (document.getElementById('slotState') || {}).textContent,
@@ -95,6 +102,21 @@ const api = new Function(script + `
   // Re-importing an existing endpoint must not create a duplicate.
   api.importDiscovered();
   assert.equal(api.rows().filter(row => row.url === discovered.url).length, 1);
+
+  // Health controls share the polling safeguard and persist the actual values.
+  await api.loadProxyHealth();
+  const interval = document.getElementById('proxyHealthInterval');
+  interval.value = '120';
+  api.healthDirty(true);
+  await api.loadProxyHealth();
+  assert.equal(interval.value, '120', 'health polling preserves edited controls');
+  document.getElementById('proxyHealthGroups').value = 'slot-1=Exit 01';
+  await api.saveProxyHealth({disabled:false});
+  assert.equal(healthSaved.interval, 120);
+  assert.equal(healthSaved.groups['slot-1'], 'Exit 01');
+  health.slots['slot-1'] = {id:'slot-1', node:'<script>bad</script>', status:'healthy', ip:'203.0.113.1'};
+  await api.loadProxyHealth();
+  assert.ok(!document.getElementById('proxyHealthRows').innerHTML.includes('<script>'));
 
   console.log('slot editor assertions passed');
 })().catch(error => { console.error(error); process.exit(1); });

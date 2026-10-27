@@ -71,6 +71,7 @@ import wb_activity
 import wb_atrest
 import wb_catalog
 import wb_egress
+import wb_proxy_health
 import wb_ipintel
 import wb_logstore
 import wb_pricing
@@ -18768,6 +18769,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
     def do_GET(self):
+        if wb_proxy_health.route(sys.modules[__name__], self, 'GET'):
+            return
         if wb_platforms.panel_route(sys.modules[__name__], self, 'GET'):
             return
         if not self._apply_pinned_route():
@@ -21909,6 +21912,7 @@ class Handler(BaseHTTPRequestHandler):
                          outcome="client_aborted", key=self._key_id(), effort=effort)
             return
         except Exception as exc:
+            wb_accounts.proxy_health_failure(account.proxy, exc)
             wall = int((time.time() - t_start) * 1000)
             record_error(model, 502, "stream aborted: %s" % exc,
                          elapsed_ms=wall, account=account.uid,
@@ -22156,6 +22160,7 @@ class Handler(BaseHTTPRequestHandler):
                          outcome="client_aborted", key=self._key_id(), effort=effort)
             return
         except Exception as exc:
+            wb_accounts.proxy_health_failure(account.proxy, exc)
             wall = int((time.time() - t_start) * 1000)
             record_error(model, 502, "messages stream aborted: %s" % exc,
                          elapsed_ms=wall, account=account.uid,
@@ -22181,6 +22186,8 @@ class Handler(BaseHTTPRequestHandler):
         return
 
     def do_POST(self):
+        if wb_proxy_health.route(sys.modules[__name__], self, 'POST'):
+            return
         if wb_platforms.panel_route(sys.modules[__name__], self, 'POST'):
             return
         if not self._apply_pinned_route():
@@ -22653,6 +22660,7 @@ class Handler(BaseHTTPRequestHandler):
                 # Upstream quit mid-stream (timeout, incomplete read, ...).
                 # The client would otherwise get a truncated stream with no
                 # terminal marker, and the traceback reached the HTTP layer.
+                wb_accounts.proxy_health_failure(account.proxy, exc)
                 if egress_on and egress_key:
                     # The egress did not finish the read; record it here instead
                     # of at header time so the streak can actually grow.
@@ -22958,6 +22966,8 @@ def _bootstrap_runtime(args):
     POOL = wb_accounts.AccountPool(ACCOUNTS_DIR, log=log)
     POOL.load()
     POOL.apply_proxy_slots()
+    wb_accounts.PROXY_HEALTH = wb_proxy_health.manager(sys.modules[__name__])
+    wb_accounts.PROXY_HEALTH.start()
     POOL.apply_reserve_credits()
     # WB_MAX_CONCURRENT_CHAT=auto: size the chat ceiling from the pool that was
     # just loaded. Runs before the listener exists, so no request can hold a

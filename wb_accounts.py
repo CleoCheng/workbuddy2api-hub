@@ -268,6 +268,15 @@ def fetch_account_profile(account, timeout=15):
 
 _OPENER_CACHE = {}
 _OPENER_LOCK = threading.Lock()
+PROXY_HEALTH = None
+
+
+def proxy_health_failure(proxy, error):
+    if PROXY_HEALTH is not None:
+        try:
+            PROXY_HEALTH.notify(proxy, error)
+        except Exception:
+            pass  # Diagnostics must not mask the original upstream exception.
 
 
 def opener_for_proxy(proxy):
@@ -305,6 +314,19 @@ def urlopen(req, timeout=30, proxy=""):
     池路径会原样发这些头名（见 wb_proxy.open_upstream）；没挂的请求（billing /
     登录 / 签到等）走原来的 .title() 路径，行为不变。
     """
+    if PROXY_HEALTH is not None and proxy:
+        if not PROXY_HEALTH.allow(proxy):
+            from wb_proxy_health import ProxyUnavailable
+            raise ProxyUnavailable('bound proxy slot is unavailable')
+        req.wb_proxy_generation = PROXY_HEALTH.generation(proxy)
+    try:
+        return _proxy_urlopen(req, timeout=timeout, proxy=proxy)
+    except Exception as exc:
+        proxy_health_failure(proxy, exc)
+        raise
+
+
+def _proxy_urlopen(req, timeout=30, proxy=""):
     if wb_upstream_pool.enabled():
         try:
             return wb_upstream_pool.urlopen(req, timeout=timeout, proxy=proxy)
@@ -1724,6 +1746,8 @@ class Account(object):
 
     def ready(self, model=None):
         if not self.enabled or not self.access_token or getattr(self, "token_expired", False):
+            return False
+        if PROXY_HEALTH is not None and self.proxy and not PROXY_HEALTH.allow(self.proxy):
             return False
         # 人工黑名单排在最前：它是静态配置（最便宜），而且在语义上优先于所有
         # 「暂时不可用」的判断 —— 被禁用的模型不该因为账号恰好恢复了就漏进来。

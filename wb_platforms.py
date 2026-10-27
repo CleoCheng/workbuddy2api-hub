@@ -158,6 +158,7 @@ class Manager:
                 env.pop(name, None)
             env.update({'WB_QODER_BRIDGE_SECRET': self.secret,
                         'WB_QODER_PROXY_FILE': str(self.proxy_file.resolve()),
+                        'WB_PROXY_HEALTH_DIR': str((Path(self.hub.ACCOUNTS_DIR) / 'proxy-health').resolve()),
                         'PYTHONIOENCODING': 'utf-8', 'PYTHONUNBUFFERED': '1'})
             worker = Path(__file__).resolve().with_name('wb_qoder_worker.py')
             args = [sys.executable, str(worker), '--host', '127.0.0.1',
