@@ -35,6 +35,8 @@ const api = new Function(script + `
   return {
     loadProxySlots,
     addProxySlotRow,
+    importDiscovered,
+    discovered: rows => { SLOT_DISCOVER = rows; },
     saveProxySlots,
     rows: () => PROXY_SLOTS,
     dirty: () => SLOTS_DIRTY,
@@ -75,6 +77,24 @@ const api = new Function(script + `
   assert.equal(api.dirty(), false, 'a successful save clears the dirty flag');
   assert.ok(!api.state().includes('未保存'),
             'the header stops saying unsaved: ' + api.state());
+
+  // 6. Discovered exits are edits too: the next poll must not erase imports.
+  const discovered = {url: 'http://127.0.0.1:17901', exit_ip: '203.0.113.1',
+                      country: 'Example', country_code: 'ZZ', reachable: true};
+  api.discovered([discovered]);
+  const discoverBox = document.getElementById('slotDiscover');
+  discoverBox.querySelectorAll = () => [{dataset: {idx: '0'}}];
+  api.importDiscovered();
+  assert.equal(api.dirty(), true, 'imported exits remain unsaved edits');
+  assert.ok(api.state().includes('未保存'), 'imports show the unsaved indicator');
+  await api.loadProxySlots();
+  const imported = api.rows().find(row => row.url === discovered.url);
+  assert.ok(imported, 'polling must retain the imported exit until saved');
+  assert.equal(imported.ip, discovered.exit_ip, 'polling preserves probe metadata');
+
+  // Re-importing an existing endpoint must not create a duplicate.
+  api.importDiscovered();
+  assert.equal(api.rows().filter(row => row.url === discovered.url).length, 1);
 
   console.log('slot editor assertions passed');
 })().catch(error => { console.error(error); process.exit(1); });

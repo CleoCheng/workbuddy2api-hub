@@ -493,6 +493,7 @@ export ANTHROPIC_API_KEY="你在看板设置中添加并绑定的API_Key"
 
 ### Unreleased
 
+- **修复导入代理槽后被轮询清空**：自动发现出口并点击导入后立即标记未保存，保留新槽位及出口信息，直到用户保存；仍不自动修改账号绑定。 / Keep discovered proxy-slot imports and probe metadata through background polling until saved, without changing account bindings.
 - **修复 Qoder 签到活动名称报错**：代理上下文只包装账号实例方法，保留静态 / 类方法描述符，避免领取流程出现 `campaign_label() takes 1 positional argument but 2 were given`；没有可领取活动时继续如实返回零新增积分。 / Preserve static and class method descriptors when adding account proxy context, fixing the Qoder check-in argument error without treating unavailable rewards as credits earned.
 - **修复平台切换后的导航回跳**：选择 Qoder 后，网关、账号、任务与福利、数据看板和运行日志均打开 Qoder 页面；平台与页面可随刷新恢复，共享设置继续统一管理 Key。/ Keep all provider pages on Qoder after platform selection, persist platform/page across refreshes, and retain shared key settings.
 - **左上角平台切换**：点击网关名称可下拉切换 WorkBuddy / Qoder 管理界面，支持键盘操作；客户端继续共用 `/v1`，实际调度仍由各 Key 的平台多选权限决定。 / The gateway name now opens a keyboard-accessible WorkBuddy / Qoder management switcher. Clients keep one `/v1` endpoint; per-key platform scopes still control routing.
