@@ -1463,17 +1463,22 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
   // 3. Tab 初始化（与下方主脚本的 MAIN_TABS 保持一致）
   var TABS = ['gateway','accounts','tasks','analytics','agents','settings','logs','platforms'];
   var pick = null;
+  var platformPick = 'workbuddy';
   try {
-    var q = new URLSearchParams(location.search).get('tab');
+    var query = new URLSearchParams(location.search);
+    var q = query.get('tab');
     var s = localStorage.getItem('wb-proxy-main-tab');
     pick = [q, s].find(function(t){ return TABS.indexOf(t) !== -1; }) || 'gateway';
+    platformPick = query.get('platform') || localStorage.getItem('wb-proxy-management-platform') || 'workbuddy';
+    if(pick === 'platforms') platformPick = 'qoder';
   } catch(e) { pick = 'gateway'; }
   window.__MAIN_TAB__ = pick;
 
   document.addEventListener('DOMContentLoaded', function(){
+    var pagePick = platformPick === 'qoder' && ['gateway','accounts','tasks','analytics','logs'].indexOf(pick) !== -1 ? 'platforms' : pick;
     TABS.forEach(function(t){
       var page = document.getElementById('page' + t.charAt(0).toUpperCase() + t.slice(1));
-      if(page) page.classList.toggle('active', t === pick);
+      if(page) page.classList.toggle('active', t === pagePick);
       var btn = document.getElementById('btnNav' + t.charAt(0).toUpperCase() + t.slice(1));
       if(btn) btn.classList.toggle('active', t === pick);
     });
@@ -1490,6 +1495,10 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
   var ATTRS = ['title', 'placeholder', 'aria-label', 'data-label', 'alt'];
   var SKIP = {SCRIPT: 1, STYLE: 1, TEXTAREA: 1, NOSCRIPT: 1};
   var DICT = {
+    '正在加载 Qoder 管理界面…': 'Loading Qoder management…',
+    'Qoder 的签到与福利位于账号页，是否可用取决于账号版本。': 'Qoder check-in and benefits are on the accounts page; availability depends on the account region.',
+    'Qoder 管理界面未就绪，请重试。': 'Qoder management is not ready. Please retry.',
+    'Qoder 管理界面加载超时，请重试。': 'Qoder management timed out. Please retry.',
     '切换管理平台': 'Switch management platform',
     'Qoder 网关': 'Qoder Gateway',
     '账号与网关': 'Accounts and gateway',
@@ -2831,6 +2840,10 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     '猫猫正在旅行途中，请稍后再来查看！': 'The cat is still travelling; check again later!'
   };
   var HANT_PHRASES = {
+    '正在加载 Qoder 管理界面…': '正在載入 Qoder 管理介面…',
+    'Qoder 的签到与福利位于账号页，是否可用取决于账号版本。': 'Qoder 的簽到與福利位於帳號頁，是否可用取決於帳號版本。',
+    'Qoder 管理界面未就绪，请重试。': 'Qoder 管理介面尚未就緒，請重試。',
+    'Qoder 管理界面加载超时，请重试。': 'Qoder 管理介面載入逾時，請重試。',
     '切换管理平台': '切換管理平臺',
     'Qoder 网关': 'Qoder 閘道',
     '账号与网关': '帳號與閘道',
@@ -4748,7 +4761,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
 
 
   <div id="pagePlatforms" class="main-page">
-    <section>
+    <section id="qoderPlatformControls">
       <h2>平台管理</h2>
       <p>客户端共用一个入口；在 API Key 中选择允许的平台，新会话按可用账号加权随机调度，同一会话优先保持原平台。</p>
       <button onclick="configureQoder(true)">启用 Qoder</button>
@@ -4762,6 +4775,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
       <div id="qoderAccountBindings"></div>
       <p>Qoder 账号可绑定现有代理槽；不同平台的账号与积分分别保存。</p>
     </section>
+    <p id="qoderViewStatus" role="status"></p>
     <iframe id="qoderFrame" title="Qoder" style="display:none;width:100%;height:82vh;border:1px solid var(--line);border-radius:12px;background:var(--panel)"></iframe>
   </div>
   <div id="pageSettings" class="main-page">
@@ -10914,6 +10928,7 @@ let visHookInstalled = false;
 async function startDashboard(){
   if(PANEL_READY) return;
   PANEL_READY = true;
+  restoreGatewayPlatform();
   // 前两步决定下面各自查什么（VIEW_REALM / 面板可见性），必须先行；之后就并行，
   // 别让国内版那条约 2 秒的成长任务接口把首屏的用量卡片拖在后面。
   await loadSettings();
@@ -11567,6 +11582,7 @@ function applyAccountsTabLayout(separate){
 
   const btnAccounts = document.getElementById('btnNavAccounts');
   if(btnAccounts) btnAccounts.style.display = _accountsSeparateTab ? '' : 'none';
+  if(btnAccounts && typeof currentGatewayPlatform !== 'undefined' && currentGatewayPlatform === 'qoder') btnAccounts.style.display = '';
   // 名字跟着走：账号已经不在这一页了，就不能再叫「网关与账号」。
   const gatewayLabel = document.getElementById('navGatewayLabel');
   if(gatewayLabel) gatewayLabel.textContent = _accountsSeparateTab ? '网关' : '网关与账号';
@@ -14614,6 +14630,22 @@ async function loadAgentsAvailability(){
 }
 
 // ==== 平台切换菜单开始 ====
+let currentGatewayPlatform = 'workbuddy';
+const QODER_VIEW_TABS = ['gateway', 'accounts', 'tasks', 'analytics', 'logs'];
+
+function restoreGatewayPlatform(){
+  try {
+    const query = new URLSearchParams(window.location.search);
+    const saved = query.get('platform') || localStorage.getItem('wb-proxy-management-platform');
+    currentGatewayPlatform = query.get('tab') === 'platforms' || saved === 'qoder' ? 'qoder' : 'workbuddy';
+  } catch(e){ currentGatewayPlatform = 'workbuddy'; }
+  syncGatewayPlatform();
+}
+
+function isQoderView(tab){
+  return currentGatewayPlatform === 'qoder' && QODER_VIEW_TABS.includes(tab);
+}
+
 function closeGatewayPlatformMenu(restoreFocus){
   const menu = document.getElementById('gatewayPlatformMenu');
   const button = document.getElementById('gatewayPlatformButton');
@@ -14636,18 +14668,24 @@ function toggleGatewayPlatformMenu(){
 
 function selectGatewayPlatform(platform){
   if(platform !== 'workbuddy' && platform !== 'qoder') return;
+  currentGatewayPlatform = platform;
+  try { localStorage.setItem('wb-proxy-management-platform', platform); } catch(e){}
   closeGatewayPlatformMenu(true);
-  switchMainTab(platform === 'qoder' ? 'platforms' : 'gateway');
+  if(platform === 'workbuddy') resetQoderPanel();
+  switchMainTab('gateway');
 }
 
-function syncGatewayPlatform(tab){
-  if(tab !== 'platforms' && tab !== 'gateway' && tab !== 'accounts') return;
-  const platform = tab === 'platforms' ? 'qoder' : 'workbuddy';
+function syncGatewayPlatform(){
+  const platform = currentGatewayPlatform;
   const name = document.getElementById('gatewayPlatformName');
   if(name) name.textContent = platform === 'qoder' ? 'Qoder 网关' : 'WorkBuddy 网关';
   document.querySelectorAll('[data-gateway-platform]').forEach(button => {
     button.setAttribute('aria-checked', String(button.dataset.gatewayPlatform === platform));
   });
+  const accounts = document.getElementById('btnNavAccounts');
+  if(accounts) accounts.style.display = platform === 'qoder' || (typeof _accountsSeparateTab !== 'undefined' && _accountsSeparateTab) ? '' : 'none';
+  const gateway = document.getElementById('navGatewayLabel');
+  if(gateway) gateway.textContent = platform === 'qoder' || (typeof _accountsSeparateTab !== 'undefined' && _accountsSeparateTab) ? '网关' : '网关与账号';
 }
 
 document.addEventListener('click', event => {
@@ -14681,6 +14719,7 @@ document.addEventListener('keydown', event => {
 // ==== 平台切换菜单结束 ====
 
 function switchMainTab(tab){
+  if(tab === 'platforms') currentGatewayPlatform = 'qoder';
   // 入口被撤掉后（?tab=agents 的书签、上次停留的页签）退回网关页
   if(tab === 'agents' && !AGENTS_AVAILABLE) tab = 'gateway';
   // 被「顶部页签显示」收起来的页面同理：书签与上次停留的页签都不能把内容调出来，
@@ -14688,10 +14727,16 @@ function switchMainTab(tab){
   if(pageHidden(tab)) tab = firstVisiblePage();
   // 账号页被合并掉之后（设置里的「账号独立成一个页签」关闭，默认），
   // ?tab=accounts 的书签与上次停留的页签都退回「网关与账号」页——区块就在那一页里。
-  if(tab === 'accounts' && !_accountsSeparateTab) tab = 'gateway';
+  if(currentGatewayPlatform !== 'qoder'){
+    if(tab === 'accounts' && !_accountsSeparateTab) tab = 'gateway';
+  }
   currentMainTab = tab;
-  syncGatewayPlatform(tab);
+  syncGatewayPlatform();
   if(tab === 'platforms') loadPlatforms();
+  const qoderView = isQoderView(tab);
+  const pageTab = qoderView ? 'platforms' : tab;
+  const platformPage = document.getElementById('pagePlatforms');
+  if(platformPage) platformPage.hidden = !qoderView && pageHidden('platforms');
   // Remember the page across reloads. The URL is updated so the address bar
   // matches what is on screen and a copied link reopens the same page;
   // storage covers a plain reload and the ?key= link, which strips the
@@ -14699,9 +14744,11 @@ function switchMainTab(tab){
   try {
     const url = new URL(window.location.href);
     url.searchParams.set('tab', tab);
+    url.searchParams.set('platform', currentGatewayPlatform);
     history.replaceState(null, '', url.toString());
   } catch(e){}
   try { localStorage.setItem(MAIN_TAB_STORE, tab); } catch(e){}
+  try { localStorage.setItem('wb-proxy-management-platform', currentGatewayPlatform); } catch(e){}
   const btnGateway = document.getElementById('btnNavGateway');
   const btnTasks = document.getElementById('btnNavTasks');
   const btnAccounts = document.getElementById('btnNavAccounts');
@@ -14730,10 +14777,19 @@ function switchMainTab(tab){
     if(!btn || !page) return;
     const on = (name === tab);
     btn.classList.toggle('active', on);
-    page.classList.toggle('active', on);
+    page.classList.toggle('active', name === pageTab);
     // 每个页面各自按自己的区块重建侧栏；非当前页的区块变化在切过来时补上
-    if(on) initPageNav(page);
+    if(name === pageTab) initPageNav(page);
   });
+  if(qoderView){
+    stopLogPolling();
+    showQoderView(tab);
+    return;
+  }
+  const controls = document.getElementById('qoderPlatformControls');
+  if(controls) controls.hidden = false;
+  const frame = document.getElementById('qoderFrame');
+  if(frame) frame.style.display = 'none';
   if(tab === 'tasks'){ loadGrowthTasks(); }
   if(tab === 'accounts' || (!_accountsSeparateTab && tab === 'gateway')){ loadActivityBoard(); }
   if(tab === 'analytics'){ loadAnalytics(); loadAnalyticsMatrix(); }
@@ -18204,7 +18260,7 @@ async function startQoderLogin(){
 async function configureQoder(enabled){
   try {
     await postJSON('/platforms/config', {qoder_enabled:enabled});
-    if(!enabled){ document.getElementById('qoderFrame').style.display = 'none'; document.getElementById('qoderFrame').srcdoc = ''; }
+    if(!enabled) resetQoderPanel();
     await loadPlatforms();
   } catch(e){ toast(e.message, 'bad'); }
 }
@@ -18226,12 +18282,93 @@ async function loadPlatforms(){
     });
   } catch(e){ document.getElementById('platformStatus').textContent=e.message; }
 }
-async function openQoderPanel(){
-  try {
+let qoderPanelLoad = null;
+let qoderPanelNavigate = null;
+let qoderPanelGeneration = 0;
+let qoderRequestedTab = 'gateway';
+let qoderPanelCancel = null;
+
+function resetQoderPanel(){
+  qoderPanelGeneration++;
+  if(qoderPanelCancel) qoderPanelCancel();
+  qoderPanelCancel = null;
+  qoderPanelLoad = null;
+  qoderPanelNavigate = null;
+  const frame = document.getElementById('qoderFrame');
+  if(frame){ frame.onload = null; frame.style.display = 'none'; frame.srcdoc = ''; }
+}
+
+function showQoderView(tab){
+  const controls = document.getElementById('qoderPlatformControls');
+  if(controls) controls.hidden = tab !== 'accounts';
+  openQoderPanel(tab);
+}
+
+async function openQoderPanel(tab){
+  if(!QODER_VIEW_TABS.includes(tab)){
+    switchMainTab('accounts');
+    return;
+  }
+  qoderRequestedTab = tab;
+  const frame = document.getElementById('qoderFrame');
+  const status = document.getElementById('qoderViewStatus');
+  const hint = () => qoderRequestedTab === 'tasks'
+    ? 'Qoder 的签到与福利位于账号页，是否可用取决于账号版本。' : '';
+  if(qoderPanelNavigate){
+    qoderPanelNavigate();
+    frame.style.display = 'block';
+    status.textContent = hint();
+    return;
+  }
+  if(qoderPanelLoad){
+    try { await qoderPanelLoad; } catch(e){ /* the original load reports the error */ }
+    return;
+  }
+  status.textContent = '正在加载 Qoder 管理界面…';
+  const generation = qoderPanelGeneration;
+  qoderPanelLoad = (async () => {
     const r=await fetch('/platforms/qoder/ui', {headers:authHeaders(),cache:'no-store'});
     if(!r.ok) throw new Error('Qoder: HTTP ' + r.status);
-    const frame=document.getElementById('qoderFrame'); frame.srcdoc=await r.text(); frame.style.display='block';
-  } catch(e){ toast(e.message, 'bad'); }
+    const html = await r.text();
+    if(generation !== qoderPanelGeneration) return;
+    await new Promise((resolve,reject) => {
+      const timeout = setTimeout(() => reject(new Error('Qoder 管理界面加载超时，请重试。')),20000);
+      qoderPanelCancel = () => { clearTimeout(timeout); resolve(); };
+      frame.onload = () => {
+        clearTimeout(timeout);
+        qoderPanelCancel = null;
+        if(generation !== qoderPanelGeneration){ resolve(); return; }
+        try {
+          const child = frame.contentWindow;
+          const navigate = child && child.switchMainTab;
+          if(typeof navigate !== 'function') throw new Error('Qoder 管理界面未就绪，请重试。');
+          qoderPanelNavigate = () => {
+            const target = qoderRequestedTab === 'tasks' ? 'accounts' : qoderRequestedTab;
+            navigate.call(child,target);
+          };
+          // The embedded panel boots asynchronously. Its final restore must use
+          // the current outer selection rather than its old localStorage tab.
+          child.switchMainTab = qoderPanelNavigate;
+          qoderPanelNavigate();
+          if(isQoderView(currentMainTab)) frame.style.display = 'block';
+          status.textContent = hint();
+          resolve();
+        } catch(e){ reject(e); }
+      };
+      // Keep a single visible navigation bar; vendor source remains untouched.
+      frame.srcdoc = html.replace('<head>','<head><style>body>header{display:none!important}main{padding-top:12px!important}</style>');
+    });
+  })();
+  try {
+    await qoderPanelLoad;
+  } catch(e){
+    if(generation === qoderPanelGeneration){
+      status.textContent = e.message;
+      document.getElementById('qoderPlatformControls').hidden = false;
+      qoderPanelLoad = null;
+      qoderPanelNavigate = null;
+    }
+  }
 }
 </script>
 </body>
