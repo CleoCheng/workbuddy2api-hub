@@ -1447,7 +1447,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
   };
 
   // 3. Tab 初始化（与下方主脚本的 MAIN_TABS 保持一致）
-  var TABS = ['gateway','accounts','tasks','analytics','agents','settings','logs'];
+  var TABS = ['gateway','accounts','tasks','analytics','agents','settings','logs','platforms'];
   var pick = null;
   try {
     var q = new URLSearchParams(location.search).get('tab');
@@ -1476,6 +1476,21 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
   var ATTRS = ['title', 'placeholder', 'aria-label', 'data-label', 'alt'];
   var SKIP = {SCRIPT: 1, STYLE: 1, TEXTAREA: 1, NOSCRIPT: 1};
   var DICT = {
+    'Qoder 国际版授权（支持 Google）': 'Authorize Qoder Global (Google supported)',
+    '打开 Qoder 官方授权链接': 'Open official Qoder authorization link',
+    '请打开官方授权链接并选择 Google 登录；授权完成后账号会自动加入。': 'Open the official authorization link and sign in with Google. The account is added automatically after authorization.',
+    'Qoder 授权成功': 'Qoder authorization succeeded',
+
+    '平台管理': 'Platform management',
+    '允许平台（可多选）': 'Allowed platforms (multiple selections)',
+    '请至少选择一个平台': 'Select at least one platform',
+    '启用 Qoder': 'Enable Qoder',
+    '停用 Qoder': 'Disable Qoder',
+    '刷新平台状态': 'Refresh platform status',
+    '打开 Qoder 账号管理': 'Open Qoder account manager',
+    '客户端共用一个入口；在 API Key 中选择允许的平台，新会话按可用账号加权随机调度，同一会话优先保持原平台。': 'Clients share one endpoint. Select allowed platforms per API key. New sessions use weighted random routing; existing sessions prefer their platform.',
+    'Qoder 账号可绑定现有代理槽；不同平台的账号与积分分别保存。': 'Qoder accounts can use existing proxy slots. Accounts and credits remain separate for each platform.',
+
     '添加 API Key 账号': 'Add an API Key account',
     '粘贴 CodeBuddy API 管理页签发的静态 Key': 'Paste the static key issued by the CodeBuddy API console',
     '前缀。': 'prefix.',
@@ -2797,6 +2812,21 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     '猫猫正在旅行途中，请稍后再来查看！': 'The cat is still travelling; check again later!'
   };
   var HANT_PHRASES = {
+    'Qoder 国际版授权（支持 Google）': 'Qoder 國際版授權（支援 Google）',
+    '打开 Qoder 官方授权链接': '開啟 Qoder 官方授權連結',
+    '请打开官方授权链接并选择 Google 登录；授权完成后账号会自动加入。': '請開啟官方授權連結並選擇 Google 登入；授權完成後帳號會自動加入。',
+    'Qoder 授权成功': 'Qoder 授權成功',
+
+    '平台管理': '平臺管理',
+    '允许平台（可多选）': '允許平臺（可多選）',
+    '请至少选择一个平台': '請至少選择一個平臺',
+    '启用 Qoder': '啟用 Qoder',
+    '停用 Qoder': '停用 Qoder',
+    '刷新平台状态': '刷新平臺状態',
+    '打开 Qoder 账号管理': '打開 Qoder 帳号管理',
+    '客户端共用一个入口；在 API Key 中选择允许的平台，新会话按可用账号加权随机调度，同一会话优先保持原平台。': '客戶端共用一個入口；在 API Key 中選择允許的平臺，新会话按可用帳号加權隨機調度，同一会话優先保持原平臺。',
+    'Qoder 账号可绑定现有代理槽；不同平台的账号与积分分别保存。': 'Qoder 帳号可绑定现有代理槽；不同平臺的帳号與积分分別保存。',
+
     "API 等价花费": "API 等價花費",
     "API 等价": "API 等價",
     " · 周期已过": " · 週期已過",
@@ -3921,6 +3951,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
       <button class="main-nav-btn" id="btnNavLogs" onclick="switchMainTab('logs')">
         运行日志
       </button>
+      <button class="main-nav-btn" id="btnNavPlatforms" onclick="switchMainTab('platforms')">平台管理</button>
     </nav>
     <a class="gh-link" href="https://github.com/ardeyouxipianyi/workbuddy2api-hub" target="_blank" rel="noopener noreferrer"
        title="查看 GitHub 项目仓库" aria-label="GitHub 项目仓库">
@@ -4674,6 +4705,23 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
 
 
 
+  <div id="pagePlatforms" class="main-page">
+    <section>
+      <h2>平台管理</h2>
+      <p>客户端共用一个入口；在 API Key 中选择允许的平台，新会话按可用账号加权随机调度，同一会话优先保持原平台。</p>
+      <button onclick="configureQoder(true)">启用 Qoder</button>
+      <button class="sec" onclick="configureQoder(false)">停用 Qoder</button>
+      <button class="sec" onclick="loadPlatforms()">刷新平台状态</button>
+      <button class="sec" onclick="openQoderPanel()">打开 Qoder 账号管理</button>
+      <button class="sec" onclick="startQoderLogin()">Qoder 国际版授权（支持 Google）</button>
+      <p id="qoderLoginStatus" role="status"></p>
+      <a id="qoderLoginLink" target="_blank" rel="noopener noreferrer" style="display:none;overflow-wrap:anywhere">打开 Qoder 官方授权链接</a>
+      <p id="platformStatus" role="status"></p>
+      <div id="qoderAccountBindings"></div>
+      <p>Qoder 账号可绑定现有代理槽；不同平台的账号与积分分别保存。</p>
+    </section>
+    <iframe id="qoderFrame" title="Qoder" style="display:none;width:100%;height:82vh;border:1px solid var(--line);border-radius:12px;background:var(--panel)"></iframe>
+  </div>
   <div id="pageSettings" class="main-page">
     <div style="margin-bottom:16px">
       <h2 style="margin:0;font-size:17px;color:var(--fg);font-family:var(--serif);font-weight:600;letter-spacing:.02em">网关设置</h2>
@@ -10684,7 +10732,7 @@ function generatePageList(current, total){
 
 // Tab ids in nav order. One list so the restore path and the nav cannot
 // drift apart.
-const MAIN_TABS = ['gateway', 'accounts', 'tasks', 'analytics', 'agents', 'settings', 'logs'];
+const MAIN_TABS = ['gateway', 'accounts', 'tasks', 'analytics', 'agents', 'settings', 'logs', 'platforms'];
 const MAIN_TAB_STORE = 'wb-proxy-main-tab';
 let currentMainTab = 'gateway';
 let analyticsRange = 'today';
@@ -11897,6 +11945,7 @@ async function loadSettings(showToast){
       stored_key: '',
       masked: k.masked || '',
       realm: k.realm || '',
+      platforms: Array.isArray(k.platforms) ? k.platforms.slice() : ['workbuddy'],
       models: Array.isArray(k.models) ? k.models.slice() : [],
       accounts: Array.isArray(k.accounts) ? k.accounts.slice() : [],
       concurrency_limit: parseInt(k.concurrency_limit || 0, 10) || 0,
@@ -13696,6 +13745,9 @@ function renderKeyRows(){
         +     '<input type="text" id="editKeyName_' + i + '" value="' + esc(row.name || '') + '" placeholder="如: Cursor / DSH / 本地测试" '
         +       'style="width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;color:var(--fg)">'
         +   '</div>'
+        +   '<div style="grid-column:1 / -1"><div>允许平台（可多选）</div>'
+        +     ['workbuddy','qoder'].map(p => '<label style="margin-right:20px"><input type="checkbox" id="editKeyPlatform_' + i + '_' + p + '"' + ((row.platforms || ['workbuddy']).includes(p) ? ' checked' : '') + '> ' + (p === 'workbuddy' ? 'WorkBuddy' : 'Qoder') + '</label>').join('')
+        +   '</div>'
         +   '<div>'
         +     '<div style="font-size:12px;color:var(--dim);margin-bottom:4px;font-weight:500">出口绑定</div>'
         +     '<select id="editKeyRealm_' + i + '" style="width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font:inherit;color:var(--fg)">'
@@ -13782,6 +13834,7 @@ function renderKeyRows(){
       +       '<span style="font-size:15px;font-weight:700;color:var(--fg)">' + esc(row.name || '未命名') + '</span>'
       +       statusBadge
       +       realmBadge
+      +       '<span class="badge s">' + esc((row.platforms || ['workbuddy']).join(' + ')) + '</span>'
       +       modelBadge
         +       accountBadge
         +       concBadge
@@ -13890,7 +13943,11 @@ async function renderKeyPickers(i){
     if(!(window.ACCOUNTS || []).length){
       try { await loadAccounts(); } catch(e) { /* keep the empty hint */ }
     }
-    const accts = window.ACCOUNTS || [];
+    let accts = (window.ACCOUNTS || []).slice();
+    try {
+      const q = await getJSON('/platforms/status');
+      accts = accts.concat((q.accounts || []).map(a => Object.assign({}, a, {uid:'qoder/' + a.uid, nickname:'Qoder · ' + (a.nickname || a.uid)})));
+    } catch(e) { /* keep WorkBuddy accounts available */ }
     accountList.innerHTML = accts.map(a => {
       const uid = String((a && a.uid) || '');
       if(!uid) return '';
@@ -13998,6 +14055,9 @@ async function saveSingleKey(index, btn){
   }
 
   row.name = name || '未命名';
+  const platforms = ['workbuddy','qoder'].filter(p => { const el = document.getElementById('editKeyPlatform_' + index + '_' + p); return el && el.checked; });
+  if(!platforms.length){ toast('请至少选择一个平台', 'warn'); return; }
+  row.platforms = platforms;
   row.realm = realm;
   row.models = Array.isArray(row.models) ? row.models.slice() : [];
   row.accounts = Array.isArray(row.accounts) ? row.accounts.slice() : [];
@@ -14059,6 +14119,7 @@ function addApiKeyRow(){
     name: '',
     key: randomKeyValue(),
     realm: '',
+    platforms: ['workbuddy'],
     models: [],
       concurrency_limit: 0,
     enabled: true,
@@ -14165,6 +14226,7 @@ async function saveApiKeys(btn){
       id: row.id || '',
       name: row.name || '',
       realm: row.realm || '',
+      platforms: row.platforms || ['workbuddy'],
       models: row.models || [],
       accounts: row.accounts || [],
         concurrency_limit: parseInt(row.concurrency_limit || 0, 10) || 0,
@@ -14519,6 +14581,7 @@ function switchMainTab(tab){
   // ?tab=accounts 的书签与上次停留的页签都退回「网关与账号」页——区块就在那一页里。
   if(tab === 'accounts' && !_accountsSeparateTab) tab = 'gateway';
   currentMainTab = tab;
+  if(tab === 'platforms') loadPlatforms();
   // Remember the page across reloads. The URL is updated so the address bar
   // matches what is on screen and a copied link reopens the same page;
   // storage covers a plain reload and the ?key= link, which strips the
@@ -14550,7 +14613,8 @@ function switchMainTab(tab){
     ['analytics', btnAnalytics, pageAnalytics],
     ['logs', btnLogs, pageLogs],
     ['settings', btnSettings, pageSettings],
-    ['agents', btnAgents, pageAgents]
+    ['agents', btnAgents, pageAgents],
+    ['platforms', document.getElementById('btnNavPlatforms'), document.getElementById('pagePlatforms')]
   ];
   tabs.forEach(([name, btn, page]) => {
     if(!btn || !page) return;
@@ -17998,6 +18062,67 @@ if (typeof SORT_DENY_TABLES !== 'undefined' && SORT_DENY_TABLES && SORT_DENY_TAB
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();
 })();
+</script>
+<script>
+
+let qoderLoginTimer = null;
+async function startQoderLogin(){
+  const status = document.getElementById('qoderLoginStatus');
+  try {
+    if(qoderLoginTimer) clearTimeout(qoderLoginTimer);
+    await postJSON('/platforms/config', {qoder_enabled:true});
+    const data = await postJSON('/platforms/qoder/api/accounts/login/start', {realm:'intl',platform:'CLI'});
+    const auth = new URL(data.authUrl);
+    if(auth.protocol !== 'https:' || auth.hostname !== 'qoder.com') throw new Error('Invalid Qoder authorization URL');
+    const link = document.getElementById('qoderLoginLink'); link.href=auth.href; link.style.display='block';
+    status.textContent='请打开官方授权链接并选择 Google 登录；授权完成后账号会自动加入。';
+    const started = Date.now();
+    async function poll(){
+      try {
+        const result=await getJSON('/platforms/qoder/api/accounts/login/poll?state='+encodeURIComponent(data.state));
+        if(result.status === 'done' || result.status === 'success' || result.account){
+          status.textContent='Qoder 授权成功'; link.style.display='none'; await loadPlatforms(); return;
+        }
+        if(result.status === 'error' || result.status === 'expired' || result.status === 'unknown') throw new Error(result.error || result.message || 'Authorization expired');
+        if(Date.now()-started > 9*60*1000) throw new Error('Authorization expired');
+        qoderLoginTimer=setTimeout(poll,3000);
+      } catch(e){ status.textContent=e.message; }
+    }
+    qoderLoginTimer=setTimeout(poll,3000);
+  } catch(e){ status.textContent=e.message; }
+}
+async function configureQoder(enabled){
+  try {
+    await postJSON('/platforms/config', {qoder_enabled:enabled});
+    if(!enabled){ document.getElementById('qoderFrame').style.display = 'none'; document.getElementById('qoderFrame').srcdoc = ''; }
+    await loadPlatforms();
+  } catch(e){ toast(e.message, 'bad'); }
+}
+async function loadPlatforms(){
+  try {
+    const data = await getJSON('/platforms/status');
+    document.getElementById('platformStatus').textContent = 'Qoder: ' + (data.qoder_enabled ? 'ON' : 'OFF') + ' · ' + data.accounts.filter(a => a.ready).length + '/' + data.accounts.length;
+    const box = document.getElementById('qoderAccountBindings');
+    box.replaceChildren();
+    data.accounts.forEach(a => {
+      const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:12px;align-items:center;margin:12px 0;flex-wrap:wrap';
+      const label = document.createElement('span'); label.textContent = 'Qoder · ' + (a.nickname || a.uid) + ' · ' + a.realm;
+      const select = document.createElement('select');
+      const direct = document.createElement('option'); direct.value = ''; direct.textContent = 'DIRECT'; select.appendChild(direct);
+      data.slots.filter(s => s.enabled).forEach(s => { const o=document.createElement('option'); o.value=s.id; o.textContent=s.name || s.id; select.appendChild(o); });
+      select.value = a.proxy_slot;
+      select.onchange = async () => { try { await postJSON('/platforms/qoder/bind',{uid:a.uid,proxy_slot:select.value}); } catch(e){ toast(e.message,'bad'); await loadPlatforms(); } };
+      row.append(label,select); box.appendChild(row);
+    });
+  } catch(e){ document.getElementById('platformStatus').textContent=e.message; }
+}
+async function openQoderPanel(){
+  try {
+    const r=await fetch('/platforms/qoder/ui', {headers:authHeaders(),cache:'no-store'});
+    if(!r.ok) throw new Error('Qoder: HTTP ' + r.status);
+    const frame=document.getElementById('qoderFrame'); frame.srcdoc=await r.text(); frame.style.display='block';
+  } catch(e){ toast(e.message, 'bad'); }
+}
 </script>
 </body>
 </html>

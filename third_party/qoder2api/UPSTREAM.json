@@ -1,0 +1,28 @@
+{
+  "repository": "https://github.com/shuishuipingan/qoder2api-hub",
+  "commit": "908f3dbc4e66bb35d01fab4ba21db334771e7e06",
+  "version": "1.7.7",
+  "license": "MIT",
+  "files": {
+    "qoder_accounts.py": "1475ad2ab82427d6c496a19fd33ea0365924b954ee43467aadb3656180700ba2",
+    "qoder_activity.py": "488d4045764a3ea693e0becb44cca0ea8c41a231cea9e503d98b7fc75ef4da3c",
+    "qoder_agents.py": "282df90545921e2040b1dcaa08f72ad894130e4f218f5ed4ffda6ae4c5fd7c58",
+    "qoder_anthropic.py": "683f6a77449f8977e72af6ff024506530c2ebec7a58440a50794f6a36cc08b65",
+    "qoder_catalog.py": "a2357abd2be5ad05ad07f09bdbc7d0b04ae6ac9e556c717029eb0ce981179abd",
+    "qoder_fingerprint.py": "7bda3f41ac748bf5e245f8e5018f585fb69af042f69cce6eb081f4a73c4a7fac",
+    "qoder_pricing.py": "0a2db7f6e10668028f5f61844f53b00c19478a60e3d70458e2ea540ae9b38c02",
+    "qoder_proxy.py": "5c0e6082fc657fc0ac1187c18219995f1836b8783ae2f92c165358cb4ea70fdd",
+    "qoder_scheduler.py": "0713248b0d40d5693089865f52a9d12abae7eb866a9eb67ac92dd424da2bf2c4",
+    "qoder_session_cache.py": "a65293761ee3c571f636da11754838eafc73d825aa4e015e7ee2fafe1dec9284",
+    "qoder_settings.py": "48c529252bf4beede386843216e0437d8b30bd5987f4fbad210b04222cdde44c",
+    "qoder_sign.py": "e37bf58cbe7a3e5d5a788c265aeac45c95244114e93776230a0004272f04a56b",
+    "qoder_tasks.py": "b0f4da3bfbe9994ee54a8d196e0762fcdc9268cb271d9b144b30792f751081c6",
+    "qoder_updater.py": "e16d294cf7769aeec67c483c34b31fa452648c050b7204f0a082bd13c8143861",
+    "qoder_webtools.py": "f5012b61c2ab329ed6a74d011343978ea872014ab99df294f3cbd33c358577b4",
+    "qoder_catalog_cn.json": "0b34dddf27ab6b63a06d228692d77a7f6a18360b3af1a30b0cd17d299550df11",
+    "qoder_catalog_intl.json": "ed95dec5ac6bbd05d1113c892b3a25fd844c27f1475fa62ab45abe286b348556",
+    "baseprompt.json": "8a32f1696d47a57adcf82df9a7efa6eccacb116fdeecfbe2968aa2f74397b416",
+    "dashboard.html": "651d03410f65835c06737db4cc5f18d05a1cfd69b38b38cbf89ad14568df6e89",
+    "LICENSE": "1126322e2cc8d165adc4c792eeb195717de2bcc7b39be1ce77959d78e87ef685"
+  }
+}

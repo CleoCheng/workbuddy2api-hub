@@ -70,6 +70,13 @@ DROP_SUFFIXES = (".pdb", ".pyc")
 # modules (ast-walked from wb_*.py) - so the trim may not take any of them,
 # and their extension modules have to survive with them.
 REQUIRED_FILES = (
+    "Lib/email/__init__.py",
+    "Lib/functools.py",
+    "Lib/glob.py",
+    "Lib/pathlib.py",
+    "Lib/tarfile.py",
+    "Lib/tempfile.py",
+
     "python.exe", "pythonw.exe", "python3.dll", "python312.dll",
     "vcruntime140.dll", "vcruntime140_1.dll", "LICENSE.txt",
     "Lib/os.py", "Lib/io.py", "Lib/ssl.py", "Lib/hashlib.py", "Lib/hmac.py", "Lib/stat.py",

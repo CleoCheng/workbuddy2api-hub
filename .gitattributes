@@ -9,3 +9,6 @@
 *.ipk binary
 *.apk binary
 *.tar.gz binary
+
+# Keep byte-pinned third-party sources identical to their upstream archive.
+third_party/qoder2api/** -whitespace

@@ -500,6 +500,23 @@ def key_allows_account(entry, uid):
     return str(uid or "").strip() in refs
 
 
+def key_platforms(entry):
+    """Legacy keys stay WorkBuddy-only; explicit invalid scopes fail closed."""
+    if not entry or "platforms" not in entry:
+        return ["workbuddy"]
+    value = entry.get("platforms")
+    if not isinstance(value, list):
+        return []
+    return [p for p in ("workbuddy", "qoder") if p in value]
+
+
+def validate_key_platforms(value):
+    if not isinstance(value, list) or not value or any(
+            p not in ("workbuddy", "qoder") for p in value):
+        raise ValueError("platforms must select workbuddy, qoder, or both")
+    return [p for p in ("workbuddy", "qoder") if p in value]
+
+
 def _clean_key_entry(entry):
     """Normalize one stored key entry; returns None when unusable.
 
@@ -527,6 +544,7 @@ def _clean_key_entry(entry):
         "name": str(entry.get("name") or "").strip() or "未命名",
         "key": key,
         "realm": realm,
+        "platforms": key_platforms(entry),
         "models": _clean_model_patterns(entry.get("models")),
         "accounts": _clean_account_refs(entry.get("accounts")),
         "concurrency_limit": concurrency,

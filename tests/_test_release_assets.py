@@ -325,7 +325,8 @@ class RuntimeTrimTests(unittest.TestCase):
         # Every stdlib module the gateway imports has to be in the contract
         # list, or the trim could drop the thing it depends on.
         imported = set()
-        for path in glob.glob(os.path.join(ROOT, "wb_*.py")):
+        runtime_paths = glob.glob(os.path.join(ROOT, "wb_*.py")) + glob.glob(os.path.join(ROOT, "third_party", "qoder2api", "qoder_*.py"))
+        for path in runtime_paths:
             with open(path, encoding="utf-8") as fh:
                 tree = ast.parse(fh.read())
             for node in ast.walk(tree):
@@ -333,7 +334,7 @@ class RuntimeTrimTests(unittest.TestCase):
                     imported.update(a.name.split(".")[0] for a in node.names)
                 elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
                     imported.add(node.module.split(".")[0])
-        local = {os.path.basename(p)[:-3] for p in glob.glob(os.path.join(ROOT, "wb_*.py"))}
+        local = {os.path.basename(p)[:-3] for p in runtime_paths}
         # sys / time and friends are compiled into python312.dll, so the trim
         # cannot remove them and they have no Lib/ file to check.
         needed = sorted(m for m in imported
