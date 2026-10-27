@@ -90,6 +90,20 @@ header{padding:16px var(--page-pad);border-bottom:1px solid var(--line);display:
   position:sticky;top:0;background:var(--header-bg);backdrop-filter:blur(10px);z-index:10;box-shadow:var(--shadow-sm)}
 h1{margin:0;font-size:17px;font-weight:700;letter-spacing:-.2px;color:var(--fg)}
 h1 span{color:var(--dim);font-weight:400;font-size:13px;margin-left:8px}
+.gateway-platform-switcher{position:relative;flex-shrink:0}
+.gateway-platform-button{display:inline-flex;align-items:center;gap:6px;background:transparent;color:var(--fg);border:1px solid transparent;padding:6px 8px;margin:-6px -8px;font:inherit;cursor:pointer}
+.gateway-platform-button:hover,.gateway-platform-button[aria-expanded="true"]{background:var(--panel2);border-color:var(--line)}
+.gateway-platform-button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+#gatewayPlatformName{color:inherit;font:inherit;margin:0}
+.gateway-platform-chevron{width:14px;height:14px;color:var(--dim);transition:transform .15s}
+.gateway-platform-button[aria-expanded="true"] .gateway-platform-chevron{transform:rotate(180deg)}
+.gateway-platform-menu{position:absolute;left:-8px;top:calc(100% + 12px);z-index:30;display:grid;gap:4px;width:min(300px,calc(100vw - 36px));padding:8px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-md)}
+.gateway-platform-menu[hidden]{display:none}
+.gateway-platform-menu button{display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:100%;padding:10px 12px;text-align:left;background:transparent;color:var(--fg);border:1px solid transparent;cursor:pointer}
+.gateway-platform-menu button:hover,.gateway-platform-menu button:focus-visible{background:var(--panel2);border-color:var(--line)}
+.gateway-platform-menu button[aria-checked="true"]{background:var(--accent-soft);border-color:var(--accent)}
+.gateway-platform-menu small,.gateway-platform-hint{color:var(--dim);font-size:12px;font-weight:400;line-height:1.5}
+.gateway-platform-hint{margin:4px 4px 0;padding:8px 8px 4px;border-top:1px solid var(--line)}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent2);
   margin-right:7px;vertical-align:middle;box-shadow:0 0 0 2px rgba(94,140,79,.22)}
 .dot.err{background:var(--bad);box-shadow:0 0 0 2px rgba(181,71,59,.22)}
@@ -1476,6 +1490,11 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
   var ATTRS = ['title', 'placeholder', 'aria-label', 'data-label', 'alt'];
   var SKIP = {SCRIPT: 1, STYLE: 1, TEXTAREA: 1, NOSCRIPT: 1};
   var DICT = {
+    '切换管理平台': 'Switch management platform',
+    'Qoder 网关': 'Qoder Gateway',
+    '账号与网关': 'Accounts and gateway',
+    '账号与 Google 授权': 'Accounts and Google authorization',
+    '切换管理界面，API 调度由 Key 的平台权限决定。': 'Switch the management view. API routing follows the platforms allowed by each key.',
     'Qoder 国际版授权（支持 Google）': 'Authorize Qoder Global (Google supported)',
     '打开 Qoder 官方授权链接': 'Open official Qoder authorization link',
     '请打开官方授权链接并选择 Google 登录；授权完成后账号会自动加入。': 'Open the official authorization link and sign in with Google. The account is added automatically after authorization.',
@@ -2812,6 +2831,11 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     '猫猫正在旅行途中，请稍后再来查看！': 'The cat is still travelling; check again later!'
   };
   var HANT_PHRASES = {
+    '切换管理平台': '切換管理平臺',
+    'Qoder 网关': 'Qoder 閘道',
+    '账号与网关': '帳號與閘道',
+    '账号与 Google 授权': '帳號與 Google 授權',
+    '切换管理界面，API 调度由 Key 的平台权限决定。': '切換管理介面，API 調度由 Key 的平臺權限決定。',
     'Qoder 国际版授权（支持 Google）': 'Qoder 國際版授權（支援 Google）',
     '打开 Qoder 官方授权链接': '開啟 Qoder 官方授權連結',
     '请打开官方授权链接并选择 Google 登录；授权完成后账号会自动加入。': '請開啟官方授權連結並選擇 Google 登入；授權完成後帳號會自動加入。',
@@ -3928,7 +3952,25 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
 <body>
 <header>
   <div class="header-left" style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
-    <h1><span class="dot" id="statusDot"></span>WorkBuddy 网关</h1>
+    <div class="gateway-platform-switcher" id="gatewayPlatformSwitcher">
+      <h1>
+        <button type="button" class="gateway-platform-button" id="gatewayPlatformButton"
+                title="切换管理平台" aria-label="切换管理平台" aria-haspopup="menu" aria-expanded="false"
+                aria-controls="gatewayPlatformMenu" onclick="toggleGatewayPlatformMenu()">
+          <span class="dot" id="statusDot"></span><span id="gatewayPlatformName">WorkBuddy 网关</span>
+          <svg class="gateway-platform-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+        </button>
+      </h1>
+      <div class="gateway-platform-menu" id="gatewayPlatformMenu" role="menu" aria-label="切换管理平台" hidden>
+        <button type="button" role="menuitemradio" aria-checked="true" data-gateway-platform="workbuddy" onclick="selectGatewayPlatform('workbuddy')">
+          <strong>WorkBuddy</strong><small>账号与网关</small>
+        </button>
+        <button type="button" role="menuitemradio" aria-checked="false" data-gateway-platform="qoder" onclick="selectGatewayPlatform('qoder')">
+          <strong>Qoder</strong><small>账号与 Google 授权</small>
+        </button>
+        <p class="gateway-platform-hint" role="note">切换管理界面，API 调度由 Key 的平台权限决定。</p>
+      </div>
+    </div>
     <nav class="main-nav">
       <button class="main-nav-btn active" id="btnNavGateway" onclick="switchMainTab('gateway')">
         <span id="navGatewayLabel">网关</span>
@@ -14571,6 +14613,73 @@ async function loadAgentsAvailability(){
   } catch(e){}
 }
 
+// ==== 平台切换菜单开始 ====
+function closeGatewayPlatformMenu(restoreFocus){
+  const menu = document.getElementById('gatewayPlatformMenu');
+  const button = document.getElementById('gatewayPlatformButton');
+  if(!menu || !button) return;
+  menu.hidden = true;
+  button.setAttribute('aria-expanded', 'false');
+  if(restoreFocus) button.focus();
+}
+
+function toggleGatewayPlatformMenu(){
+  const menu = document.getElementById('gatewayPlatformMenu');
+  const button = document.getElementById('gatewayPlatformButton');
+  if(!menu || !button) return;
+  if(!menu.hidden){ closeGatewayPlatformMenu(true); return; }
+  menu.hidden = false;
+  button.setAttribute('aria-expanded', 'true');
+  const selected = menu.querySelector('[aria-checked="true"]') || menu.querySelector('button');
+  if(selected) selected.focus();
+}
+
+function selectGatewayPlatform(platform){
+  if(platform !== 'workbuddy' && platform !== 'qoder') return;
+  closeGatewayPlatformMenu(true);
+  switchMainTab(platform === 'qoder' ? 'platforms' : 'gateway');
+}
+
+function syncGatewayPlatform(tab){
+  if(tab !== 'platforms' && tab !== 'gateway' && tab !== 'accounts') return;
+  const platform = tab === 'platforms' ? 'qoder' : 'workbuddy';
+  const name = document.getElementById('gatewayPlatformName');
+  if(name) name.textContent = platform === 'qoder' ? 'Qoder 网关' : 'WorkBuddy 网关';
+  document.querySelectorAll('[data-gateway-platform]').forEach(button => {
+    button.setAttribute('aria-checked', String(button.dataset.gatewayPlatform === platform));
+  });
+}
+
+document.addEventListener('click', event => {
+  const switcher = document.getElementById('gatewayPlatformSwitcher');
+  if(switcher && !switcher.contains(event.target)) closeGatewayPlatformMenu(false);
+});
+document.addEventListener('keydown', event => {
+  const menu = document.getElementById('gatewayPlatformMenu');
+  const button = document.getElementById('gatewayPlatformButton');
+  if(!menu || !button) return;
+  if(menu.hidden){
+    if(event.target === button && event.key === 'ArrowDown'){
+      event.preventDefault(); toggleGatewayPlatformMenu();
+    }
+    return;
+  }
+  if(event.key === 'Escape'){
+    event.preventDefault(); closeGatewayPlatformMenu(true); return;
+  }
+  const items = Array.from(menu.querySelectorAll('button'));
+  const index = items.indexOf(document.activeElement);
+  if(index < 0) return;
+  let next;
+  if(event.key === 'ArrowDown') next = (index + 1) % items.length;
+  else if(event.key === 'ArrowUp') next = (index + items.length - 1) % items.length;
+  else if(event.key === 'Home') next = 0;
+  else if(event.key === 'End') next = items.length - 1;
+  else return;
+  event.preventDefault(); items[next].focus();
+});
+// ==== 平台切换菜单结束 ====
+
 function switchMainTab(tab){
   // 入口被撤掉后（?tab=agents 的书签、上次停留的页签）退回网关页
   if(tab === 'agents' && !AGENTS_AVAILABLE) tab = 'gateway';
@@ -14581,6 +14690,7 @@ function switchMainTab(tab){
   // ?tab=accounts 的书签与上次停留的页签都退回「网关与账号」页——区块就在那一页里。
   if(tab === 'accounts' && !_accountsSeparateTab) tab = 'gateway';
   currentMainTab = tab;
+  syncGatewayPlatform(tab);
   if(tab === 'platforms') loadPlatforms();
   // Remember the page across reloads. The URL is updated so the address bar
   // matches what is on screen and a copied link reopens the same page;
