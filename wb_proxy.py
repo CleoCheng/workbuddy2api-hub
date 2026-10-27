@@ -75,6 +75,7 @@ import wb_ipintel
 import wb_logstore
 import wb_pricing
 import wb_settings
+import wb_platforms
 import wb_webprompts
 import wb_tiers
 import wb_upstream_pool
@@ -10121,6 +10122,7 @@ def runtime_settings_view():
             "id": entry.get("id") or "",
             "name": entry.get("name") or "",
             "realm": entry.get("realm") or "",
+            "platforms": wb_settings.key_platforms(entry),
             "models": list(entry.get("models") or []),
             "accounts": list(entry.get("accounts") or []),
             "enabled": entry.get("enabled", True) is not False,
@@ -18766,6 +18768,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
     def do_GET(self):
+        if wb_platforms.panel_route(sys.modules[__name__], self, 'GET'):
+            return
         if not self._apply_pinned_route():
             return
         parsed = urlparse(self.path)
@@ -18933,7 +18937,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         req_realm = self._request_realm() or CURRENT_REALM
         try:
-            entries = fetch_models(realm=req_realm)
+            entries = ([] if wb_settings.key_platforms(self.key_entry) == ['qoder']
+                       else fetch_models(realm=req_realm))
         except Exception as exc:
             return self._error(502, str(exc))
         # Level 4 is best effort: warm the local cache in the background at
@@ -18943,6 +18948,9 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             pass
         data = [model_entry(mid, meta) for mid, meta in entries]
+        if (wb_platforms.qoder_allowed(self.key_entry)
+                or wb_platforms.panel_catalog_enabled(sys.modules[__name__], self)):
+            data = wb_platforms.models(sys.modules[__name__], self, data)
         pinned = pinned_account()
         if pinned is not None:
             # 定址路由宣告的是「这个账号实际能接的模型」：该账号禁用的模型
@@ -19579,6 +19587,11 @@ class Handler(BaseHTTPRequestHandler):
                                        "invalid_request_error")
                 entry_id = str(item.get("id") or "").strip()
                 stored = existing.get(entry_id) or {}
+                try:
+                    platforms = wb_settings.validate_key_platforms(
+                        item.get("platforms", wb_settings.key_platforms(stored)))
+                except ValueError as exc:
+                    return self._error(400, str(exc), "invalid_request_error")
                 value = str(item.get("key") or "").strip()
                 if not value and entry_id and entry_id in existing:
                     value = existing[entry_id].get("key") or ""
@@ -19636,6 +19649,7 @@ class Handler(BaseHTTPRequestHandler):
                     "name": name,
                     "key": value,
                     "realm": realm,
+                    "platforms": platforms,
                     "models": models,
                     "accounts": accounts,
                     "concurrency_limit": concurrency_limit,
@@ -20277,6 +20291,7 @@ class Handler(BaseHTTPRequestHandler):
                 if dropped:
                     log("proxy slots: unbound %d account(s) from removed slots"
                         % dropped)
+            wb_platforms.refresh_bindings(sys.modules[__name__])
             log("proxy slots saved: %d slot(s)" % len(saved))
             return self._json(200, {"slots": proxy_slots_view()})
         if path == "/proxy/slots/test":
@@ -22166,6 +22181,8 @@ class Handler(BaseHTTPRequestHandler):
         return
 
     def do_POST(self):
+        if wb_platforms.panel_route(sys.modules[__name__], self, 'POST'):
+            return
         if not self._apply_pinned_route():
             return
         path = self.path.split("?")[0]
@@ -22306,7 +22323,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         # Fail closed until the Anthropic-to-Chat bridge has verified prompt-cache
         # parity. Reject before forwarding or recording any paid usage.
-        if is_messages_route and not _anthropic_messages_enabled():
+        if is_messages_route and not _anthropic_messages_enabled() and not wb_platforms.qoder_allowed(self.key_entry):
             return self._anthropic_error(
                 400,
                 "Anthropic Messages is disabled by default: this gateway "
@@ -22326,6 +22343,9 @@ class Handler(BaseHTTPRequestHandler):
             aliases = {}
         _apply_model_aliases(payload, aliases)
         _apply_background_model_alias(payload)
+        self._platform_started = False
+        if wb_platforms.dispatch(sys.modules[__name__], self, path, payload):
+            return
         # Check per-key concurrency limit (#359)
         key_ok, cur_key_conc, max_key_conc = _acquire_key_slot(self.key_entry)
         if not key_ok:

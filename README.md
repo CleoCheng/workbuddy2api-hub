@@ -491,6 +491,15 @@ export ANTHROPIC_API_KEY="你在看板设置中添加并绑定的API_Key"
 
 ## 六、版本更新记录 (Changelog)
 
+### Unreleased
+
+- **修复导入代理槽后被轮询清空**：自动发现出口并点击导入后立即标记未保存，保留新槽位及出口信息，直到用户保存；仍不自动修改账号绑定。 / Keep discovered proxy-slot imports and probe metadata through background polling until saved, without changing account bindings.
+- **修复 Qoder 签到活动名称报错**：代理上下文只包装账号实例方法，保留静态 / 类方法描述符，避免领取流程出现 `campaign_label() takes 1 positional argument but 2 were given`；没有可领取活动时继续如实返回零新增积分。 / Preserve static and class method descriptors when adding account proxy context, fixing the Qoder check-in argument error without treating unavailable rewards as credits earned.
+- **修复平台切换后的导航回跳**：选择 Qoder 后，网关、账号、任务与福利、数据看板和运行日志均打开 Qoder 页面；平台与页面可随刷新恢复，共享设置继续统一管理 Key。/ Keep all provider pages on Qoder after platform selection, persist platform/page across refreshes, and retain shared key settings.
+- **左上角平台切换**：点击网关名称可下拉切换 WorkBuddy / Qoder 管理界面，支持键盘操作；客户端继续共用 `/v1`，实际调度仍由各 Key 的平台多选权限决定。 / The gateway name now opens a keyboard-accessible WorkBuddy / Qoder management switcher. Clients keep one `/v1` endpoint; per-key platform scopes still control routing.
+- **个人版统一平台网关**：可选启用内置 Qoder 后端；每个 API Key 多选 WorkBuddy / Qoder，新会话按可用账号加权随机选择、同一会话优先保持平台，仅在响应开始前对临时错误切换。支持共享代理槽，原有 Key 保持 WorkBuddy 单平台权限。详见 [统一平台说明](docs/UNIFIED_PLATFORMS.md)。 / Opt-in bundled Qoder backend with per-key platform scopes, weighted random routing, session affinity, pre-response transient failover and shared proxy slots. Legacy keys remain WorkBuddy-only.
+
+
 <!-- 发版时：把下面的 Unreleased 段落整理成新版本号（## vX.Y.Z），整体移入 docs/CHANGELOG.md 顶部 -->
 
 - **v1.8.0 发布**：汇总 v1.7.33 之后的 #640、#642、#643、#645/#647，并补齐 #578、#618、#625 的发布记录。完整变更、验证范围与已知限制见 **[docs/CHANGELOG.md](docs/CHANGELOG.md#v180)**；下一版的改动继续写在本段。
@@ -618,3 +627,5 @@ PR 贡献者（v1.4.5 之前的改动未进上方更新记录，这里一并列�
 
 1. 本项目为非官方自托管网关，仅供技术研究、逆向协议学习与个人合法授权账号在私有环境测试使用。
 2. 本项目不提供任何账号及额度。请严格遵守官方服务条款，禁止用于任何商业转售、恶意并发或违规滥用。
+
+当前个人分支测试矩阵：228 个套件：168 个 Python + 60 个 JS。
