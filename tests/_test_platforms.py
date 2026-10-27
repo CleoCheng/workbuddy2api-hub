@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import wb_platforms as P
 import wb_settings as S
 import wb_proxy as W
+import wb_qoder_worker as Q
 
 
 class PlatformTests(unittest.TestCase):
@@ -81,6 +82,44 @@ class PlatformTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.manager.start()
         self.assertIsNone(self.manager.process)
+
+    def test_worker_checkin_preserves_static_helpers_and_proxy_context(self):
+        context = threading.local()
+        context.uid = 'previous-account'
+
+        class Account:
+            uid = 'qoder-account'
+
+            @staticmethod
+            def campaign_label(campaign):
+                return campaign['title']
+
+            @classmethod
+            def account_kind(cls):
+                return cls.__name__
+
+            @property
+            def label(self):
+                return 'account label'
+
+            def campaign_checkin(self, campaign):
+                return self.campaign_label(campaign), context.uid
+
+            def failing_request(self):
+                raise RuntimeError(context.uid)
+
+        Q._wrap_account_methods(Account, context)
+        account = Account()
+        self.assertEqual(account.campaign_checkin({'title': 'Daily credits'}),
+                         ('Daily credits', 'qoder-account'))
+        self.assertEqual(Account.campaign_label({'title': 'Daily credits'}),
+                         'Daily credits')
+        self.assertEqual(account.account_kind(), 'Account')
+        self.assertEqual(account.label, 'account label')
+        self.assertEqual(context.uid, 'previous-account')
+        with self.assertRaisesRegex(RuntimeError, 'qoder-account'):
+            account.failing_request()
+        self.assertEqual(context.uid, 'previous-account')
 
     def test_private_worker_boot_and_auth(self):
         import http.client

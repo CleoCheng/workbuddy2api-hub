@@ -12,6 +12,26 @@ import urllib.request
 from pathlib import Path
 
 
+def _wrap_account_methods(account_class, context):
+    def with_account(method):
+        @functools.wraps(method)
+        def wrapped(self, *args, **kwargs):
+            previous = getattr(context, 'uid', '')
+            context.uid = self.uid
+            try:
+                return method(self, *args, **kwargs)
+            finally:
+                context.uid = previous
+        return wrapped
+
+    for name, method in list(vars(account_class).items()):
+        # Static helpers have no account instance; preserve their descriptors.
+        if isinstance(method, (staticmethod, classmethod)):
+            continue
+        if callable(method) and not name.startswith('__'):
+            setattr(account_class, name, with_account(method))
+
+
 def main():
     root = Path(__file__).resolve().parent
     sys.path.insert(0, str(root / 'third_party' / 'qoder2api'))
@@ -63,21 +83,8 @@ def main():
             return opener().open(request, *args, **kwargs)
         return original_open(request, *args, **kwargs)
 
-    def with_account(method):
-        @functools.wraps(method)
-        def wrapped(self, *args, **kwargs):
-            previous = getattr(context, 'uid', '')
-            context.uid = self.uid
-            try:
-                return method(self, *args, **kwargs)
-            finally:
-                context.uid = previous
-        return wrapped
-
     # Refresh, quota, check-in and other background work all inherit the binding.
-    for name, method in list(vars(accounts.Account).items()):
-        if callable(method) and not name.startswith('__'):
-            setattr(accounts.Account, name, with_account(method))
+    _wrap_account_methods(accounts.Account, context)
 
     def ready(self, *args, **kwargs):
         allowed = getattr(context, 'allowed', None)

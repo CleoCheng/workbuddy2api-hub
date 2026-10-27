@@ -76,6 +76,31 @@ OAuth initialization uses the worker's environment proxy until an account exists
 额度与用量的权威数据仍按平台分别记录：WorkBuddy 在原数据看板，Qoder 在内嵌管理页。
 两家积分不相加，也不视为同一种计费单位。
 
+## Qoder 积分与任务 / Qoder credits and tasks
+
+网关的签到按钮只能领取上游为当前账号开放的活动，不能代做官方桌面端任务。
+活动列表里的「查看详情」或套餐促销不代表有积分可领；Pro 福利包也不是 Free
+账号的固定赠送额度。未领取或当前不可领取与「已经到账」含义不同。
+
+截至 2026-10-27，国际版[每日 100 Credits](https://docs.qoder.com/events/100credits)
+需要在官方 Qoder 桌面端手动领取，每日 10:00（UTC+8）开启新一轮，领取后 30 天
+有效。仅通过网关 OAuth 添加账号不等于完成桌面端领取或获得新人试用权益。
+
+[DeepSeek-Flash 限免](https://docs.qoder.com/events/deepseek-flash-free)与每日积分
+是两项活动：当前限免至 2026-10-31 24:00（UTC+8），有每日免费次数限制，Free / 零
+积分账号也可使用。调用模型不会增加积分余额。当前目录的模型名为 `DeepSeek-Flash`；
+可用 `qoder/DeepSeek-Flash` 指定 Qoder，前提是 Key 勾选 Qoder 并允许国际区。
+模型、活动与资格始终以官方当前返回为准，网关不保证永久限免。
+
+Check-in only claims rewards made available to the account; it does not complete
+desktop tasks. Detail links and subscription promotions are not claimable credit
+rewards, and a Pro pack is not a guaranteed Free-plan benefit. As of 2026-10-27,
+the daily 100-credit promotion requires claiming in the official desktop app.
+DeepSeek-Flash has a separate daily free-use allowance through October 31, even
+with zero credits; using it does not increase the credit balance. Request
+`qoder/DeepSeek-Flash` with a key that permits Qoder and the international realm.
+Availability and eligibility follow the current official rules.
+
 ## 更新与回滚 / Updates and rollback
 
 迁移分支应从自己的 GitHub fork 更新，勿直接用上游官方发行包覆盖个人扩展。
