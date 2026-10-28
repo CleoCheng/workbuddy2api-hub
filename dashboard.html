@@ -2851,6 +2851,14 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     '所有启用的代理槽均已达账号上限，无法分配': 'All enabled proxy slots have reached their account limit; cannot assign',
     ' 个账号因槽位达上限未分配': ' accounts unassigned due to slot limits',
     '（已自动分配代理出口）': ' (proxy exit auto-assigned)',
+    '固定': 'Pin',
+    '已固定': 'Pinned',
+    '请先保存槽位后再固定节点': 'Save slots before pinning a node',
+    '当前节点已固定，测速后不自动根据排名调整；点击取消固定': 'Current node is pinned; ranking will not change it. Click to unpin',
+    '固定当前节点，定期测速后不根据排名调整该槽位': 'Pin current node; ranking will not automatically change this slot',
+    '已固定该槽位节点，定期测速后将保留当前节点不自动轮转': 'Node pinned; periodic ranking will keep this node without rotation',
+    '已取消固定，恢复根据测速排名自动选择': 'Unpinned; automatic selection by ranking resumed',
+    '「固定」可锁定该代理槽当前使用的节点，定期测速后不随排名自动轮转；自动调整未固定槽位时，优先使用相同地区的低延迟节点替换，以防异地风控。': 'Pin locks the current node of a proxy slot so ranking does not rotate it. Automatic adjustment prioritizes low-latency nodes in the same region to avoid geo-risk.',
     '账号代理槽': 'Account proxy slots',
     '账号余额低于该值时不再接单，避免余额被用尽后触发上游的短信提醒。填 0 表示关闭。': 'An account stops taking orders once its balance drops below this, so the balance is never drained enough to trigger the upstream SMS alert. 0 turns it off.',
     '账号凭证刷新成功': 'Account credentials refreshed',
@@ -3730,6 +3738,14 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     "所有启用的代理槽均已达账号上限，无法分配": "所有啟用的代理槽均已達帳號上限，無法分配",
     " 个账号因槽位达上限未分配": " 個帳號因槽位達上限未分配",
     "（已自动分配代理出口）": "（已自動分配代理出口）",
+    "固定": "固定",
+    "已固定": "已固定",
+    "请先保存槽位后再固定节点": "請先儲存槽位後再固定節點",
+    "当前节点已固定，测速后不自动根据排名调整；点击取消固定": "目前節點已固定，測速後不自動根據排名調整；點擊取消固定",
+    "固定当前节点，定期测速后不根据排名调整该槽位": "固定目前節點，定期測速後不根據排名調整該槽位",
+    "已固定该槽位节点，定期测速后将保留当前节点不自动轮转": "已固定該槽位節點，定期測速後將保留目前節點不自動輪轉",
+    "已取消固定，恢复根据测速排名自动选择": "已取消固定，恢復根據測速排名自動選擇",
+    "「固定」可锁定该代理槽当前使用的节点，定期测速后不随排名自动轮转；自动调整未固定槽位时，优先使用相同地区的低延迟节点替换，以防异地风控。": "「固定」可鎖定該代理槽目前使用的節點，定期測速後不隨排名自動輪轉；自動調整未固定槽位時，優先使用相同地區的低延遲節點替換，以防異地風控。",
     "账号余额低于该值时不再接单，避免余额被用尽后触发上游的短信提醒。填 0 表示关闭。": "帳號餘額低於該值時不再接單，避免餘額被用盡後觸發上游的簡訊提醒。填 0 表示關閉。",
     "账号凭证刷新成功": "帳號憑證重新整理成功",
     "账号列表是空的": "帳號列表是空的",
@@ -14880,8 +14896,13 @@ function slotSelectHtml(a){
   const ipLine = (boundSlot && boundSlot.ip)
     ? '<div class="mono" style="font-size:11px;color:var(--dim);margin-top:2px" title="出口 IP: ' + esc(boundSlot.ip) + '">' + esc(boundSlot.ip) + '</div>'
     : '';
-  return '<select class="slot-select" onchange="setAccountSlot(&quot;' + uidAttr + '&quot;, this.value, this)">'
-    + opts.join('') + '</select>' + ipLine;
+  const latBadge = boundSlot
+    ? '<span data-acct-slot-latency="' + esc(boundSlot.id) + '">' + slotLatencyHtml(boundSlot) + '</span> '
+    : '';
+  return '<div style="display:inline-flex;align-items:center;gap:6px;justify-content:center;flex-wrap:wrap">'
+    + latBadge
+    + '<select class="slot-select" onchange="setAccountSlot(&quot;' + uidAttr + '&quot;, this.value, this)">'
+    + opts.join('') + '</select></div>' + ipLine;
 }
 
 async function setAccountSlot(uid, slotId, el){
@@ -15053,6 +15074,7 @@ function slotPayload(){
     id: s.id || '', name: s.name || '', url: (s.url || '').trim(),
     enabled: s.enabled !== false,
     max_accounts: Math.max(0, parseInt(s.max_accounts, 10) || 0),
+    pinned: s.pinned === true,
     group: s.group || slotGroupTag(s) || '',
     ip: s.ip || '', country: s.country || '', country_code: s.country_code || '',
     ip_type: s.ip_type || '', isp: s.isp || '', asn: s.asn || '',
@@ -15120,6 +15142,11 @@ function refreshProxySlotLatencies(){
       }
     }
   });
+  document.querySelectorAll('[data-acct-slot-latency]').forEach(el=>{
+    const sid = el.getAttribute('data-acct-slot-latency');
+    const s = PROXY_SLOTS.find(item => item.id === sid);
+    if(s) el.innerHTML = slotLatencyHtml(s);
+  });
 }
 
 function renderProxySlots(){
@@ -15155,6 +15182,9 @@ function renderProxySlots(){
         + '<td style="text-align:center" data-label="账号上限"><input type="number" min="0" value="' + (s.max_accounts > 0 ? s.max_accounts : '') + '" placeholder="不限" title="最多代理的账号数量（填 0 或留空表示不限）" oninput="setSlotMaxAccounts(' + i + ', this.value)" class="slot-input" style="width:75px;text-align:center"></td>'
         + '<td style="text-align:center;white-space:nowrap" data-label="">'
         +   '<button class="sec mini" onclick="testProxySlot(' + i + ', this)"'+(SLOT_BATCH_RUNNING?' disabled':'')+'>测试</button> '
+        +   (s.pinned
+            ? '<button class="mini s" onclick="togglePinSlot(' + i + ', this)" title="' + esc(slotBatchText('当前节点已固定，测速后不自动根据排名调整；点击取消固定')) + '">' + slotBatchText('已固定') + '</button> '
+            : '<button class="sec mini" onclick="togglePinSlot(' + i + ', this)" title="' + esc(slotBatchText('固定当前节点，定期测速后不根据排名调整该槽位')) + '">' + slotBatchText('固定') + '</button> ')
         +   '<button class="sec mini" onclick="openProxyNodeModal(' + i + ')"'+(!s.id || s.enabled===false?' disabled':'')+'>更换</button> '
         +   '<button class="danger mini" onclick="removeProxySlot(' + i + ')">删除</button>'
         + '</td></tr>';
@@ -15162,8 +15192,27 @@ function renderProxySlots(){
     + '</tbody></table></div>'
     + '<div class="legend slot-latency-legend"><span class="slot-latency slot-latency-ok">≤300 ms</span><span class="slot-latency slot-latency-warn">301–800 ms</span><span class="slot-latency slot-latency-bad">&gt;800 ms / 不可用</span><span>延迟为代理 HTTPS 探测耗时，不代表模型响应速度；悬停查看探测时间。</span></div>'
     + '<div class="legend"><span>「绑定账号」只统计已启用账号；停用账号会自动释放槽位，重新启用后需重新绑定。在网关页账号表的「出口」下拉中调整绑定。名称留空时按出口自动显示「国家 类型」，点「测试」会补全出口信息并据此命名。</span>'
-    + ' <span>「账号上限」设置单个代理槽最多代理的账号数量（填 0 或留空为不限），可在表头点击「统一」批量设置；一键分配代理时超出上限的账号将顺延分配至后续可用槽位。</span></div>';
+    + ' <span>「账号上限」设置单个代理槽最多代理的账号数量（填 0 或留空为不限），可在表头点击「统一」批量设置；一键分配代理时超出上限的账号将顺延分配至后续可用槽位。</span>'
+    + ' <span>' + slotBatchText('「固定」可锁定该代理槽当前使用的节点，定期测速后不随排名自动轮转；自动调整未固定槽位时，优先使用相同地区的低延迟节点替换，以防异地风控。') + '</span></div>';
   applyTableSort('slotList');
+}
+
+async function togglePinSlot(index, btn){
+  const s = PROXY_SLOTS[index];
+  if(!s || !s.id){ toast(slotBatchText('请先保存槽位后再固定节点'), 'warn'); return; }
+  const nextPinned = !s.pinned;
+  if(btn) btn.disabled = true;
+  try{
+    const r = await postJSON('/proxy/slots/pin', {id: s.id, pinned: nextPinned});
+    s.pinned = nextPinned;
+    if(r && r.slots) PROXY_SLOTS = r.slots;
+    renderProxySlots();
+    toast(nextPinned ? slotBatchText('已固定该槽位节点，定期测速后将保留当前节点不自动轮转') : slotBatchText('已取消固定，恢复根据测速排名自动选择'), 'ok');
+  }catch(e){
+    toast(slotBatchText('操作失败: ') + e.message, 'bad');
+  }finally{
+    if(btn) btn.disabled = false;
+  }
 }
 
 function setSlotMaxAccounts(index, val){

@@ -27,7 +27,7 @@ let adminBehavior=null;
 dom.installDom({
   confirm: () => true,
   fetch: (url, options) => {
-    if(adminBehavior && (String(url).startsWith('/proxy/subscriptions') || String(url).startsWith('/proxy/health/nodes') || url==='/proxy/health/switch' || url==='/accounts/set' || url==='/proxy/health/cancel-scan')) return adminBehavior(url,options);
+    if(adminBehavior && (String(url).startsWith('/proxy/subscriptions') || String(url).startsWith('/proxy/health/nodes') || url==='/proxy/health/switch' || url==='/accounts/set' || url==='/proxy/health/cancel-scan' || url==='/proxy/slots/pin')) return adminBehavior(url,options);
     if(url==='/proxy/slots/test' && testBehavior) return testBehavior(JSON.parse(options.body));
     if(url === '/proxy/health/config') healthSaved = JSON.parse(options.body);
     const payload = String(url).startsWith('/proxy/health') ? health : {current: 'intl', accounts: [], slots: serverSlots, data: [],
@@ -55,7 +55,7 @@ const api = new Function(script + `
     loadProxySubscriptions,openProxySubscription,closeProxySubscription,saveProxySubscription,
     deleteProxySubscription,viewSubscriptionNodes,closeSubNodesModal,loadSubNodesData,renderSubNodesList,
     cancelHealthScan,fmtSubInterval,
-    setSlotMaxAccounts,batchSetSlotMaxAccounts,autoAssignSlots,slotPayload,
+    setSlotMaxAccounts,batchSetSlotMaxAccounts,autoAssignSlots,slotPayload,togglePinSlot,
     slotSelectHtml,slotExitHtml,autoSlotName,slotGroupTag,
     batchFixture: rows => {PROXY_SLOTS=rows;SLOTS_DIRTY=false;},
     manualProbe:(url,row)=>SLOT_MANUAL_PROBES.set(url,row),
@@ -224,6 +224,7 @@ const api = new Function(script + `
       {name:'[B] test-node-1',type:'Shadowsocks',latency_ms:120,ip:'1.2.3.4',country:'US',alive:true}]};
     if(url==='/proxy/health/cancel-scan')payload={ok:true,cancelled:true};
     if(url==='/proxy/subscriptions/delete')payload={available:true,providers:[]};
+    if(url==='/proxy/slots/pin')payload={ok:true,pinned:true,slot:{id:'slot-b',pinned:true},slots:[{id:'slot-b',url:'http://127.0.0.1:18001',pinned:true,group:'[B]',ip:'38.58.56.34',country:'美国',ip_type:'residential',enabled:true}]};
     if(options && options.body) calls.push({url,body:JSON.parse(options.body)});
     return {status:200,ok:true,json:async()=>payload,text:async()=>JSON.stringify(payload)};
   };
@@ -354,6 +355,11 @@ const api = new Function(script + `
   const acctHtml = api.slotSelectHtml({uid: 'u-ip-test', proxySlot: 'slot-b'});
   assert.ok(acctHtml.includes('38.58.56.34'), 'slotSelectHtml displays exit IP in cell');
   assert.ok(acctHtml.includes('美国 住宅 [B] (38.58.56.34)'), 'slotSelectHtml option displays label with group and IP');
+  assert.ok(acctHtml.includes('slot-latency'), 'slotSelectHtml displays real-time latency badge');
+
+  // Toggle pinning slot
+  await api.togglePinSlot(0, {disabled: false});
+  assert.equal(api.rows()[0].pinned, true, 'togglePinSlot toggles slot pinned state');
 
   // Proxy slot exit column & auto name with subscription group
   const exitHtml = api.slotExitHtml(api.rows()[0]);

@@ -53,6 +53,39 @@ def extract_group_tag(name_or_node):
     return ""
 
 
+def prioritize_same_region_candidates(candidates, slot, slow_ms=1500):
+    """Sort candidates prioritizing same region with low latency to avoid geo risk."""
+    slot_cc = (slot.get('country_code') or '').strip().upper()
+    slot_country = (slot.get('country') or '').strip()
+    if not slot_cc and not slot_country:
+        return candidates
+
+    def is_same_region(c):
+        c_cc = (c.get('country_code') or '').strip().upper()
+        c_country = (c.get('country') or '').strip()
+        if slot_cc and c_cc and slot_cc == c_cc:
+            return True
+        if slot_country and c_country and slot_country == c_country:
+            return True
+        return False
+
+    same_region_good = []
+    same_region_other = []
+    other_region = []
+
+    for c in candidates:
+        if is_same_region(c):
+            lat = c.get('latency_ms') or 0
+            if lat <= slow_ms and c.get('ok', True):
+                same_region_good.append(c)
+            else:
+                same_region_other.append(c)
+        else:
+            other_region.append(c)
+
+    return same_region_good + other_region + same_region_other
+
+
 def config(accounts_dir):
     out = dict(DEFAULTS, groups={})
     raw = wb_settings.load(accounts_dir).get('proxy_health')
@@ -697,7 +730,7 @@ class Monitor:
                 probe = self._probe(slot['url'], cfg['timeout'])
                 if probe['ok']:
                     rows[slot['id']].update(probe, status='healthy', failures=0, last_success=time.time())
-        reserved = {rows[s['id']].get('ip') for s in slots if s not in targets}
+        reserved = {rows[s['id']].get('ip') for s in slots if s not in targets or s.get('pinned') or rows[s['id']].get('pinned')}
         usable = [r for r in ranked if r['ip'] not in reserved]
         desired = usable[:len(targets)]
         desired_ips = {r['ip'] for r in desired}
@@ -705,6 +738,8 @@ class Monitor:
             if self.stop_event.is_set() or self.cfg != cfg:
                 return
             row = rows[slot['id']]
+            if slot.get('pinned') or row.get('pinned'):
+                continue
             bad = row['status'] == 'unavailable'
             slow = row.get('slow_count', 0) >= cfg['slow_failures']
             peers = [rows[s['id']] for s in slots if s['id'] != slot['id']]
@@ -720,6 +755,7 @@ class Monitor:
             if slow and not bad and not full:
                 choices = [r for r in choices if r['latency_ms'] <= row.get('latency_ms', 0) *
                            (1 - cfg['improvement_pct'] / 100)]
+            choices = prioritize_same_region_candidates(choices, slot, slow_ms=cfg.get('slow_ms', 1500))
             switched = self._ranked_switch(cfg, slot, slots, proxy_map, rows, choices,
                                            'unavailable' if bad else 'slow' if slow else 'ranking')
             if not switched and not row.get('error'):
@@ -825,6 +861,8 @@ class Monitor:
         sid = slot['id']
         group = cfg['groups'][sid]
         row = rows[sid]
+        if slot.get('pinned') or row.get('pinned'):
+            return
         old_node = proxy_map.get(group, {}).get('now')
         spare = proxy_map.get(cfg['probe_group'], {})
         production = proxy_map.get(group, {})

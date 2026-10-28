@@ -474,6 +474,27 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(len({r['ip'] for r in self.mon.rows.values()}), 2)
         self.assertTrue(all(r['status'] == 'healthy' for r in self.mon.rows.values()))
 
+    def test_same_region_candidate_prioritization(self):
+        slot = {'country_code': 'US', 'country': '美国'}
+        candidates = [
+            {'node': 'hk-1', 'country_code': 'HK', 'latency_ms': 200, 'ok': True},
+            {'node': 'us-1', 'country_code': 'US', 'latency_ms': 400, 'ok': True},
+            {'node': 'us-slow', 'country_code': 'US', 'latency_ms': 2000, 'ok': True},
+        ]
+        sorted_c = H.prioritize_same_region_candidates(candidates, slot, slow_ms=1500)
+        self.assertEqual(sorted_c[0]['node'], 'us-1', 'Low latency same region node must be prioritized first')
+        self.assertEqual(sorted_c[1]['node'], 'hk-1', 'Other region comes second if same region has high latency')
+        self.assertEqual(sorted_c[2]['node'], 'us-slow')
+
+    def test_pinned_slot_is_not_rotated_by_ranked_check(self):
+        self.ranked_fixture()
+        self.rounds(1)
+        self.slots[0]['pinned'] = True
+        self.mon.rows['slot-1']['pinned'] = True
+        old = self.nodes['g1']
+        self.rounds(2)
+        self.assertEqual(self.nodes['g1'], old, 'Pinned slot must retain its node through ranked check')
+
 
 class SubscriptionTests(unittest.TestCase):
     def setUp(self):

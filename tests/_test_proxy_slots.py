@@ -67,7 +67,7 @@ print("[2] set_proxy_slots: assigns ids, dedupes, persists")
 saved = S.set_proxy_slots(
     d,
     [
-        {"name": "one", "url": "http://x:1", "max_accounts": 5, "group": "[B]"},
+        {"name": "one", "url": "http://x:1", "max_accounts": 5, "group": "[B]", "pinned": True},
         {"name": "two", "url": "http://x:2", "max_accounts": "invalid"},
         {"name": "dup", "url": "http://x:1"},
     ],
@@ -78,6 +78,8 @@ check("ids unique", len({s["id"] for s in saved}) == 2, saved)
 check("max_accounts positive preserved", saved[0]["max_accounts"] == 5, saved[0]["max_accounts"])
 check("max_accounts invalid falls back to 0", saved[1]["max_accounts"] == 0, saved[1]["max_accounts"])
 check("group preserved", saved[0]["group"] == "[B]", saved[0]["group"])
+check("pinned True preserved", saved[0]["pinned"] is True, saved[0]["pinned"])
+check("pinned missing defaults False", saved[1]["pinned"] is False, saved[1]["pinned"])
 again = S.proxy_slots(d)
 check(
     "persisted and reloaded",
@@ -87,6 +89,7 @@ check(
 check("names preserved", [s["name"] for s in again] == ["one", "two"], again)
 check("max_accounts persisted and reloaded", again[0]["max_accounts"] == 5, again[0])
 check("group persisted and reloaded", again[0]["group"] == "[B]", again[0])
+check("pinned persisted and reloaded", again[0]["pinned"] is True, again[0])
 
 print()
 print("[3] new ids never collide with existing ones")

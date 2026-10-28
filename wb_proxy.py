@@ -20379,6 +20379,25 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, reply)
         if path == "/proxy/discover":
             return self._json(200, {"candidates": discover_proxy_slots()})
+        if path == "/proxy/slots/pin":
+            slot_id = str(payload.get("id") or "").strip()
+            pinned = bool(payload.get("pinned", False))
+            slot = wb_settings.find_proxy_slot(ACCOUNTS_DIR, slot_id)
+            if slot is None:
+                return self._error(404, "no such proxy slot")
+            updated = wb_settings.update_proxy_slot(ACCOUNTS_DIR, slot_id, {"pinned": pinned})
+            try:
+                key = os.path.abspath(ACCOUNTS_DIR) if ACCOUNTS_DIR else ""
+                mon = wb_proxy_health._managers.get(key)
+                if mon:
+                    with mon.lock:
+                        if slot_id in mon.rows:
+                            mon.rows[slot_id]["pinned"] = pinned
+                            mon.rows[slot_id]["manual"] = pinned
+                    mon._publish(mon.rows)
+            except Exception:
+                pass
+            return self._json(200, {"ok": True, "pinned": pinned, "slot": updated, "slots": proxy_slots_view()})
         return self._error(404, "not found", "invalid_request_error")
 
     # ---- one-click agent integration (wb_agents) ----
