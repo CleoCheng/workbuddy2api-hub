@@ -19,6 +19,7 @@ import wb_proxy_health as H
 import wb_settings as S
 import wb_accounts as A
 import wb_upstream_pool as U
+import wb_proxy_subscriptions as P
 
 
 class HealthTests(unittest.TestCase):
@@ -397,6 +398,182 @@ class HealthTests(unittest.TestCase):
                              ('slow_failures', 1), ('residential_tie_pct', 21), ('improvement_pct', 91)]:
             with self.assertRaises(ValueError):
                 H.validate({field:value})
+
+    def test_manual_choice_is_retained_until_sustained_slow_health_takeover(self):
+        self.ranked_fixture()
+        self.rounds(1)
+        result = self.mon.manual_switch('slot-1', 'old-1')
+        self.assertTrue(result['ok'])
+        self.assertTrue(self.mon.rows['slot-1']['manual'])
+        self.rounds(2)
+        self.assertEqual(self.nodes['g1'], 'old-1', 'Ranking must respect the explicit manual choice')
+        self.mon.rows['slot-1']['last_switch'] = 0
+        self.delays['old-1'] = 2000
+        self.rounds(3)
+        self.assertNotEqual(self.nodes['g1'], 'old-1')
+        self.assertFalse(self.mon.rows['slot-1']['manual'])
+        self.assertEqual(self.mon.history[-1]['reason'], 'slow')
+
+    def test_manual_candidates_mark_occupied_exits_and_recheck_live_ip(self):
+        self.ranked_fixture()
+        self.rounds(1)
+        data = self.mon.node_choices('slot-1')
+        occupied = next(n for n in data['nodes'] if n['node'] == self.nodes['g2'])
+        self.assertFalse(occupied['selectable'])
+        self.assertEqual(occupied['unavailable_reason'], 'exit_occupied')
+        self.assertNotIn(self.nodes['g1'], [n['node'] for n in data['nodes']])
+        old = self.nodes['g1']
+        self.ips['old-1'] = self.ips[self.nodes['g2']]
+        with self.assertRaises(ValueError):
+            self.mon.manual_switch('slot-1', 'old-1')
+        self.assertEqual(self.nodes['g1'], old)
+        self.assertEqual(self.nodes['Gateway spare probe'], 'REJECT')
+
+    def test_manual_choice_requires_known_peers_and_serializes_with_health(self):
+        self.ranked_fixture()
+        self.rounds(1)
+        self.mon.run_lock.acquire()
+        try:
+            with self.assertRaisesRegex(ValueError, 'busy'):
+                self.mon.manual_switch('slot-1', 'old-1')
+        finally:
+            self.mon.run_lock.release()
+        old = self.nodes['g1']
+        self.ips[self.nodes['g2']] = None
+        with self.assertRaisesRegex(ValueError, 'peer_exit_unknown'):
+            self.mon.manual_switch('slot-1', 'old-1')
+        self.assertEqual(self.nodes['g1'], old)
+        self.assertTrue(self.mon.allow(self.slots[1]['url']), 'Manual probes must not bypass the failure threshold and block a peer')
+        self.assertEqual(self.mon.rows['slot-2']['status'], 'suspect')
+        self.assertIn(self.slots[1]['url'], self.mon.pending)
+
+    def test_manual_peer_uses_secondary_endpoint_before_refusing_unique_exit(self):
+        self.ranked_fixture()
+        self.rounds(1)
+        original = self.mon._probe
+        def primary_failed(url, timeout, endpoint=0):
+            if ':17902' in url and not endpoint:
+                return dict(ok=False, error='exit_probe_failed')
+            return original(url, timeout, endpoint)
+        self.mon._probe = primary_failed
+        result = self.mon.manual_switch('slot-1', 'old-1')
+        self.assertTrue(result['ok'])
+        self.assertEqual(self.mon.rows['slot-2']['status'], 'healthy')
+
+    def test_resume_automatic_and_rejected_peers_can_recover_after_subscription_change(self):
+        self.ranked_fixture()
+        self.rounds(1)
+        self.mon.rows['slot-1']['manual'] = True
+        with mock.patch.object(self.mon, 'start'):
+            self.mon.manual_switch('slot-1', automatic=True)
+        self.assertFalse(self.mon.rows['slot-1']['manual'])
+        for sid, group in [('slot-1','g1'), ('slot-2','g2')]:
+            self.nodes[group] = 'REJECT'
+            self.mon.rows[sid].update(status='unavailable', last_success=0, ip='', last_switch=0)
+        self.rounds(1)
+        self.assertEqual(len({r['ip'] for r in self.mon.rows.values()}), 2)
+        self.assertTrue(all(r['status'] == 'healthy' for r in self.mon.rows.values()))
+
+
+class SubscriptionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.path = Path(self.tmp.name) / 'mihomo.json'
+        self.doc = {'secret':'private-controller', 'listeners':[{'port':17901}],
+            'proxy-providers':{
+                'a':{'type':'http','url':'https://one.example/path-private-token','interval':3600,'path':'./a.yaml'},
+                'b':{'type':'http','url':'https://two.example/sub?token=query-private-token','interval':3600,'path':'./b.yaml'}},
+            'proxy-groups':[dict(name=g,type='select',proxies=['REJECT'],use=['a','b'])
+                            for g in ('g1','g2','Gateway spare probe')],
+            'rules':['MATCH,REJECT']}
+        self.path.write_text(json.dumps(self.doc), encoding='utf-8')
+        self.env = mock.patch.dict(P.os.environ, WB_MIHOMO_CONFIG=str(self.path))
+        self.env.start();self.addCleanup(self.env.stop)
+        self.validate = mock.patch.object(P, '_validate_native')
+        self.validate.start();self.addCleanup(self.validate.stop)
+        hub = types.SimpleNamespace(ACCOUNTS_DIR=str(Path(self.tmp.name)/'accounts'),log=lambda s:None)
+        self.mon = H.Monitor(hub);self.addCleanup(self.mon.stop)
+        self.mon.cfg.update(groups={'slot-1':'g1','slot-2':'g2'})
+        self.mon.trigger = mock.Mock()
+        self.live = copy.deepcopy(self.doc)
+        self.selections = {'g1':'a-node','g2':'b-node','Gateway spare probe':'REJECT'}
+        self.mon.rows = {s:dict(id=s,url='http://127.0.0.1:17901',status='healthy',ip='8.8.8.8')
+                         for s in ('slot-1','slot-2')}
+        self.mon._api = self.api
+        self.mon._select = lambda cfg,g,n:self.selections.update({g:n})
+        self.reject_new = False
+
+    def api(self, cfg, path, body=None):
+        if path == '/configs?force=true':
+            data = json.loads(body['payload'])
+            if self.reject_new and 'c' in data['proxy-providers']:
+                raise OSError('private-url-token upstream')
+            self.live = data
+            for g in self.selections:self.selections[g] = 'REJECT'
+            return {}
+        if path == '/providers/proxies':
+            return {'providers':{name:{'proxies':[{'name':name+'-node'}]} for name in self.live['proxy-providers']}}
+        if path == '/proxies':
+            return {'proxies':{g['name']:dict(type='Selector',now=self.selections[g['name']],
+                all=['REJECT']+[n+'-node' for n in g['use']]) for g in self.live['proxy-groups']}}
+        if path.startswith('/providers/proxies/') and body is not None:return {}
+        raise AssertionError(path)
+
+    def test_subscription_view_never_returns_token_path_or_controller_secret(self):
+        text = json.dumps(P.view(self.mon))
+        for secret in ('private-controller','path-private-token','query-private-token','token='):
+            self.assertNotIn(secret, text)
+        self.assertIn('one.example', text)
+        self.assertEqual(len(P.view(self.mon)['providers']), 2)
+
+    def test_new_subscription_joins_all_existing_groups_without_listener_changes(self):
+        P.change(self.mon, dict(name='c',url='https://three.example/sub?token=new-private',enabled=True,interval=1800))
+        saved = json.loads(self.path.read_text())
+        self.assertEqual(saved['listeners'], self.doc['listeners'])
+        self.assertEqual(saved['rules'], self.doc['rules'])
+        self.assertTrue(all(g['use']==['a','b','c'] for g in saved['proxy-groups']))
+        self.assertEqual(self.selections['g1'], 'a-node')
+        self.assertEqual(saved['proxy-providers']['c']['override']['additional-prefix'], '[c] ')
+        self.assertEqual(saved['proxy-providers']['c']['proxy'], 'DIRECT', 'Subscription downloads must not depend on a working account exit')
+        self.assertEqual(saved['proxy-providers']['c']['size-limit'], 10 * 1024 * 1024)
+        self.assertEqual(len(list((self.mon.root/'config-backups').glob('*.json'))), 1)
+        self.mon.trigger.assert_called_once_with(rescan=True)
+
+    def test_blank_url_retained_and_disable_marks_removed_selected_exit_unavailable(self):
+        P.change(self.mon, dict(name='a',url='',enabled=False,interval=7200))
+        saved = json.loads(self.path.read_text())
+        self.assertEqual(saved['proxy-providers']['a']['url'], self.doc['proxy-providers']['a']['url'])
+        self.assertEqual(self.selections['g1'], 'REJECT')
+        self.assertEqual(self.mon.rows['slot-1']['status'], 'unavailable')
+        self.assertEqual(self.selections['g2'], 'b-node')
+
+    def test_apply_failure_restores_config_selections_and_health_without_secrets(self):
+        self.reject_new = True
+        before = copy.deepcopy(self.mon.rows)
+        with self.assertRaisesRegex(ValueError, '^subscription_apply_failed_rolled_back$'):
+            P.change(self.mon, dict(name='c',url='https://bad.example/private-url-token'))
+        self.assertEqual(json.loads(self.path.read_text()), self.doc)
+        self.assertEqual(self.selections['g1'], 'a-node')
+        self.assertEqual(self.mon.rows, before)
+
+    def test_validation_and_busy_guards_preserve_original_config(self):
+        for url in ('http://example.com/sub', 'https://127.0.0.1/x', 'https://localhost/x',
+                    'https://user:password@example.com/sub', 'https://example.com/x#private'):
+            with self.assertRaises(ValueError):P.change(self.mon, dict(name='c',url=url))
+        self.mon.run_lock.acquire()
+        try:
+            with self.assertRaisesRegex(ValueError, 'busy'):P.change(self.mon, dict(name='c',url='https://three.example/sub'))
+        finally:self.mon.run_lock.release()
+        self.assertEqual(json.loads(self.path.read_text()), self.doc)
+        with mock.patch.dict(P.os.environ, WB_MIHOMO_CONFIG=''):
+            self.assertFalse(P.view(self.mon)['available'])
+
+    def test_refresh_preserves_selection_and_never_sends_url_to_panel(self):
+        result = P.change(self.mon, dict(name='a'), refresh=True)
+        self.assertEqual(self.selections['g1'], 'a-node')
+        self.assertNotIn('path-private-token', json.dumps(result))
+        self.mon.trigger.assert_called_once_with(rescan=True)
 
 
 if __name__ == '__main__':

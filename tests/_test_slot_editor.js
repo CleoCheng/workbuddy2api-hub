@@ -23,9 +23,11 @@ let health = {config:{enabled:false,interval:90,failures:3,cooldown:600,timeout:
                      candidate_limit:12,groups:{}}, slots:{}, history:[]};
 let healthSaved;
 let testBehavior=null;
+let adminBehavior=null;
 dom.installDom({
   confirm: () => true,
   fetch: (url, options) => {
+    if(adminBehavior && (String(url).startsWith('/proxy/subscriptions') || String(url).startsWith('/proxy/health/nodes') || url==='/proxy/health/switch')) return adminBehavior(url,options);
     if(url==='/proxy/slots/test' && testBehavior) return testBehavior(JSON.parse(options.body));
     if(url === '/proxy/health/config') healthSaved = JSON.parse(options.body);
     const payload = String(url).startsWith('/proxy/health') ? health : {current: 'intl', accounts: [], slots: serverSlots, data: [],
@@ -49,6 +51,8 @@ const api = new Function(script + `
     saveProxyHealth,
     slotLatencyState,slotLatencyHtml,renderProxySlots,testProxySlot,
     testAllProxySlots,
+    openProxyNodeModal,chooseProxyNode,closeProxyNodeModal,resumeProxySlotAuto,
+    loadProxySubscriptions,openProxySubscription,closeProxySubscription,saveProxySubscription,
     batchFixture: rows => {PROXY_SLOTS=rows;SLOTS_DIRTY=false;},
     manualProbe:(url,row)=>SLOT_MANUAL_PROBES.set(url,row),
     healthDirty: value => { PROXY_HEALTH_DIRTY = value; },
@@ -204,6 +208,41 @@ const api = new Function(script + `
   await api.testAllProxySlots(batchButton);
   assert.equal(seen.length,old,'never auto-save dirty rows just to run probes');
   assert(document.getElementById('slotBatchState').textContent.includes('请先保存'));
+
+  // Node choices preserve server ordering, escape untrusted labels and cannot select occupied exits.
+  const calls=[];
+  adminBehavior=async (url,options)=>{
+    let payload={available:true,providers:[{name:'test-sub',source:'https://example.com/••••',enabled:true,interval:3600,nodes:15}]};
+    if(url.startsWith('/proxy/health/nodes'))payload={id:'manual-slot',current:'old',manual:false,nodes:[
+      {node:'<script>node</script>',ip:'8.8.8.8',latency_ms:100,country:'US',selectable:true},
+      {node:'occupied',ip:'8.8.4.4',latency_ms:90,selectable:false,unavailable_reason:'exit_occupied'}]};
+    if(options && options.body) calls.push({url,body:JSON.parse(options.body)});
+    return {status:200,ok:true,json:async()=>payload,text:async()=>JSON.stringify(payload)};
+  };
+  api.batchFixture([{id:'manual-slot',url:'http://127.0.0.1:17901',enabled:true}]);
+  await api.openProxyNodeModal(0);
+  assert(document.getElementById('proxyNodeModal').classList.contains('show'));
+  const choices=document.getElementById('proxyNodeChoices').innerHTML;
+  assert(choices.includes('&lt;script&gt;')&&!choices.includes('<script>'));
+  assert(choices.includes('已被其他槽位占用'));
+  await api.chooseProxyNode(1,{disabled:false});assert.equal(calls.length,0);
+  await api.chooseProxyNode(0,{disabled:false});
+  assert.deepEqual(calls[0],{url:'/proxy/health/switch',body:{id:'manual-slot',node:'<script>node</script>'}});
+  assert(!document.getElementById('proxyNodeModal').classList.contains('show'));
+
+  // Subscription editing never fills an existing secret URL; blank means retain it.
+  await api.loadProxySubscriptions();api.openProxySubscription(0);
+  assert.equal(document.getElementById('proxySubscriptionURL').value,'');
+  assert.equal(document.getElementById('proxySubscriptionName').disabled,true);
+  await api.saveProxySubscription({disabled:false});
+  const saved=calls.find(c=>c.url==='/proxy/subscriptions/save').body;
+  assert.deepEqual(saved,{name:'test-sub',url:'',interval:3600,enabled:true});
+  assert.equal(document.getElementById('proxySubscriptionURL').value,'');
+  api.openProxySubscription();
+  assert.equal(document.getElementById('proxySubscriptionName').disabled,false);
+  document.getElementById('proxySubscriptionURL').value='https://private.example/sub?token=secret';
+  api.closeProxySubscription();
+  assert.equal(document.getElementById('proxySubscriptionURL').value,'','closing the editor clears subscription credentials');
 
   console.log('slot editor assertions passed');
 })().catch(error => { console.error(error); process.exit(1); });

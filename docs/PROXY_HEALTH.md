@@ -99,6 +99,46 @@ replays inference requests.
 
 ## 状态、恢复与回滚 / State, recovery and rollback
 
+### 订阅与手动节点管理 / Subscriptions and manual nodes
+
+「一键测试全部槽位」只检测现有监听端口，不直接更换节点。自动轮换由后台健康
+检查执行；「全量测速并重新排名」更新订阅候选榜单并按已配置规则分配出口。
+同一订阅的多个不同节点可以同时供不同槽位使用，仍受服务商并发、设备数与流量
+限制；不同节点可能共用实际出口 IP，因此仍以实测 IP 去重。
+
+在「订阅管理」可新增订阅、修改链接、启用/停用及刷新。多个订阅可以同时加入现有
+出口组，不新增监听端口。已有链接仅显示域名，编辑时留空保留原凭证；新链接只
+向自己的服务器提交。配置先由 Mihomo 原生校验，再热加载，失败恢复文件及原
+选择。原选择在新订阅中已不存在时先切到 REJECT 并暂停该槽位，再由健康检查
+重新分配；不临时回退直连。保留最近 5 份私有配置快照，含订阅凭证，不提交 Git。
+
+服务端写订阅默认不启用。管理员需在进程环境配置 `WB_MIHOMO_CONFIG`（受管
+Mihomo JSON 文件的绝对路径，JSON 同时是合法 YAML）、`WB_MIHOMO_HOME`
+（Mihomo 工作目录）、可选 `WB_MIHOMO_BIN`（原生可执行文件，默认 `mihomo`）。
+初次接管前备份原 YAML，并用可信的部署工具转换成等价 JSON，由 `mihomo -t`
+验证；运行时保持纯标准库，不尝试推断或重写任意 YAML。进程须有配置写权限，
+控制器和独立探测接口继续仅监听回环地址。
+
+槽位「更换」弹窗按榜单展示其他节点的延迟、国家、IP 类型和实际 IP。其他槽位
+占用的 IP 不可选。点击后重新探测候选及其它槽位，并复测生产端口，失败回滚。
+手动选择保留，不被普通排名优化覆盖；节点故障或持续高延迟仍允许自动接管，
+也可点击「恢复自动选择」。全量扫描占用独立探测端口时需等待扫描完成后再更换。
+
+Batch port testing does not directly switch nodes. Background health checks
+perform recovery, and full rescans rebuild and allocate the measured ranking.
+Multiple nodes from one subscription can run concurrently, subject to provider
+limits; names do not guarantee distinct IPs. Subscription management supports
+add/edit/enable/disable/refresh without adding listeners. Existing secret URLs
+are never returned to the panel; a blank edit preserves them. Native validation,
+hot reload and bounded private rollback snapshots protect configuration changes.
+Removed selections fail closed through REJECT until health recovery assigns a
+verified exit. Enable writes explicitly using the environment variables above
+and an operator-prepared JSON-form Mihomo config; arbitrary YAML is not rewritten.
+Manual node selection revalidates candidate and peer exits and verifies the
+production listener. Ranking respects the manual choice until automatic mode is
+resumed or failed/sustained-slow recovery takes over. Wait for full scans to
+finish before changing nodes or subscriptions.
+
 「一键测试全部槽位」以三个并发检查所有已保存的端口（含停用槽位），逐项更新
 延迟并显示进度、通过/失败数量及错误。测试不会启用槽位或改动账号绑定；有未保存
 编辑时先保存再测试。此按钮只测量当前监听端口；遍历订阅需另外启用全量排名。

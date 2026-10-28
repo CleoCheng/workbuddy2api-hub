@@ -493,6 +493,7 @@ export ANTHROPIC_API_KEY="你在看板设置中添加并绑定的API_Key"
 
 ### Unreleased
 
+- **代理订阅与手动换节点**：面板新增多订阅管理，可新增、修改地址、启停和刷新，链接凭证仅保存在服务器；槽位可弹窗查看实测节点、延迟与占用情况，复测独立 IP 后更换。手动选择保留至恢复自动或故障/持续高延迟接管，原端口与账号绑定不变。订阅写入默认关闭，需管理员配置受管 Mihomo 文件；校验或应用失败自动回滚。 / Add opt-in multi-subscription editing with secret URLs retained only on the server, validated hot reload/rollback, and per-slot measured node selection with live unique-IP revalidation. Manual choices survive ranking until resumed or health recovery takes over.
 - **可选订阅全量测速排名**：独立探测端口遍历全部订阅节点，按实际 IP 去重，延迟相差可配置范围内住宅优先；为现有槽位选前 N 个出口，周期更新排名，慢节点连续超阈值后验证更快备用并轮换。固定端口、绑定、冷却与故障复核保持生效；面板显示进度和排名。默认关闭。 / Opt-in full subscription scans rank unique measured exit IPs, prefer residential exits only within bounded latency ties and converge existing listeners to the top N. Periodic ranking and sustained-slow failover preserve bindings, cooldowns, verification and rollback, with visible scan progress/results.
 - **代理槽一键测试**：三个并发测试全部已保存端口，逐项更新延迟、进度及通过/失败汇总；失败不阻塞剩余端口，不自动保存编辑、启用槽位或改变账号绑定。补充监听端口与订阅节点数量的区别。 / Test all saved proxy ports with three workers, live latency/progress and a success/failure summary, without changing slot enablement or account bindings.
 - **代理槽延迟与颜色标记**：槽位表直接展示最近 HTTPS 探测耗时，≤300 ms 绿色、301–800 ms 黄色、>800 ms 红色；异常/不可用、未探测和过期状态分别显示，悬停可见探测时间。健康轮询只更新延迟单元格，不覆盖未保存编辑。 / Proxy slots show color-coded HTTPS probe latency with distinct failure, unknown and stale states; background updates preserve unsaved edits.
