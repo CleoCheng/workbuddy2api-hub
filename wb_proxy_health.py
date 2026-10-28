@@ -27,6 +27,8 @@ import wb_settings
 
 DEFAULTS = dict(enabled=False, interval=90, failures=3, cooldown=600,
                 timeout=5, candidate_limit=12, allow_cross_country=False,
+                ranked=False, rank_interval=1800, slow_ms=1500,
+                slow_failures=3, improvement_pct=20, residential_tie_pct=10,
                 controller='http://127.0.0.1:9090',
                 probe_proxy='http://127.0.0.1:17990',
                 probe_group='Gateway spare probe', groups={})
@@ -54,14 +56,16 @@ def _loopback_url(value):
 
 def validate(raw):
     out = dict(DEFAULTS, groups={})
-    for name in ('enabled', 'allow_cross_country'):
+    for name in ('enabled', 'allow_cross_country', 'ranked'):
         value = raw.get(name, out[name])
         if not isinstance(value, bool):
             raise ValueError(name + ' must be boolean')
         out[name] = value
     for name, bounds in dict(interval=(30, 3600), failures=(2, 10),
                              cooldown=(60, 3600), timeout=(2, 15),
-                             candidate_limit=(1, 50)).items():
+                             candidate_limit=(1, 50), rank_interval=(300, 86400),
+                             slow_ms=(100, 30000), slow_failures=(2, 10),
+                             improvement_pct=(0, 90), residential_tie_pct=(0, 20)).items():
         value = raw.get(name, out[name])
         if isinstance(value, bool) or not isinstance(value, int) or not bounds[0] <= value <= bounds[1]:
             raise ValueError('%s must be an integer in %s..%s' % (name, *bounds))
@@ -77,6 +81,28 @@ def validate(raw):
             or len(set(out['groups'].values())) != len(out['groups'])):
         raise ValueError('each slot and the spare probe require distinct selectors')
     return out
+
+
+def rank_exits(results, tie_pct):
+    """Latency first; residential preference only within anchored, bounded bands.
+
+    Anchor each band to its fastest member, avoiding non-transitive comparisons
+    that could let a chain of similar delays promote a very slow residential IP.
+    Keep only one node per observed exit IP.
+    """
+    remaining = sorted((r for r in results if r.get('ok') and r.get('ip')),
+                       key=lambda r: (r['latency_ms'], r['node']))
+    ranked, seen = [], set()
+    while remaining:
+        ceiling = remaining[0]['latency_ms'] * (1 + tie_pct / 100)
+        at = next((i for i, r in enumerate(remaining) if r['latency_ms'] > ceiling), len(remaining))
+        band, remaining = remaining[:at], remaining[at:]
+        band.sort(key=lambda r: (r.get('ip_type') != 'residential', r['latency_ms'], r['node']))
+        for row in band:
+            if row['ip'] not in seen:
+                ranked.append(dict(row, rank=len(ranked) + 1))
+                seen.add(row['ip'])
+    return ranked
 
 
 def atomic_json(path, value):
@@ -209,11 +235,14 @@ class Monitor:
         self.last_signal = {}
         self.last_round = 0
         self.error = ''
+        self.ranking = {}
         self.cfg = config(hub.ACCOUNTS_DIR)
         try:
             old = json.loads((self.root / 'state.json').read_text(encoding='utf-8'))
             self.rows = old.get('slots', {})
             self.history = old.get('history', [])[-100:]
+            # Scan again after restart; persisted results remain visible meanwhile.
+            self.ranking = dict(old.get('ranking', {}), completed_at=0, scanning=False)
         except (OSError, ValueError):
             pass
         atexit.register(self.stop)
@@ -259,6 +288,7 @@ class Monitor:
             self.cfg = new
             self.pending.clear()
             self.last_round = 0
+            self.ranking['completed_at'] = 0
             self._persist()
         self.start()
         self.wake.set()
@@ -291,9 +321,11 @@ class Monitor:
             self.pending[proxy] = 'request_failure'
         self.wake.set()
 
-    def trigger(self):
+    def trigger(self, rescan=False):
         with self.lock:
             self.last_round = 0
+            if rescan:
+                self.ranking['completed_at'] = 0
         self.start()
         self.wake.set()
 
@@ -302,7 +334,8 @@ class Monitor:
             return dict(config=copy.deepcopy(self.cfg), running=bool(self.thread and self.thread.is_alive()),
                         secret_configured=(self.root / 'secret').is_file(),
                         last_round=self.last_round, error=self.error,
-                        slots=json.loads(json.dumps(self.rows)), history=self.history[-30:])
+                        slots=json.loads(json.dumps(self.rows)), history=self.history[-30:],
+                        ranking=copy.deepcopy(self.ranking))
 
     def _publish(self, rows):
         with self.lock:
@@ -313,7 +346,7 @@ class Monitor:
         blocked = [r['url'] for r in self.rows.values() if r.get('status') in
                    ('unavailable', 'switching') and r.get('url')]
         atomic_json(self.root / 'state.json', dict(enabled=self.cfg['enabled'],
-                    blocked=blocked, slots=self.rows, history=self.history[-100:]))
+                    blocked=blocked, slots=self.rows, history=self.history[-100:], ranking=self.ranking))
 
     def _record(self, slot, reason, **fields):
         item = dict(at=time.time(), slot=slot, reason=reason, **fields)
@@ -405,12 +438,14 @@ class Monitor:
                            managed=slot['id'] in cfg['groups'], reason=reasons.get(slot['url'], 'scheduled'))
                 if probe['ok']:
                     row.update(probe, status='healthy', failures=0, error='', last_success=now)
+                    row['slow_count'] = old.get('slow_count', 0) + 1 if probe['latency_ms'] > cfg['slow_ms'] else 0
                     if old.get('ip') and old['ip'] != probe['ip']:
                         row['generation'] = time.time_ns()
                 else:
                     count = old.get('failures', 0) + 1
                     status = 'unavailable' if old.get('status') in ('unavailable', 'switching') else 'suspect'
                     row.update(status=status, failures=count, error=probe['error'])
+                    row['slow_count'] = 0
                     row.setdefault('ip', slot.get('ip', ''))
                 rows[slot['id']] = row
             self._publish(rows)
@@ -426,6 +461,12 @@ class Monitor:
                 group = cfg['groups'].get(slot['id'])
                 if probe['ok'] and group in proxy_map:
                     rows[slot['id']]['ip_node'] = proxy_map[group].get('now')
+            if cfg['ranked']:
+                self._ranked_check(cfg, slots, proxy_map, providers, rows)
+                with self.lock:
+                    self.last_round = time.time()
+                self._publish(rows)
+                return
             for slot in slots:
                 if self.stop_event.is_set():
                     break
@@ -455,6 +496,223 @@ class Monitor:
             self._publish(rows)
         finally:
             self.run_lock.release()
+
+    def _scan_candidates(self, cfg, proxy_map, providers):
+        spare = proxy_map.get(cfg['probe_group'], {})
+        if spare.get('type') != 'Selector':
+            raise ValueError('dedicated_probe_selector_required')
+        allowed = set(spare.get('all', []))
+        production = set()
+        for group in cfg['groups'].values():
+            production.update(proxy_map.get(group, {}).get('all', []))
+        nodes = sorted({p['name'] for provider in providers.values()
+                        if provider.get('vehicleType') in ('HTTP', 'File')
+                        for p in provider.get('proxies', []) if p.get('name') in allowed & production})
+        original = spare.get('now')
+        results, intel_cache = [], {}
+        with self.lock:
+            self.ranking = dict(scanning=True, started_at=time.time(), completed_at=0,
+                                done=0, total=len(nodes), results=[], ranked=[])
+            self._persist()
+        try:
+            for node in nodes:
+                if self.stop_event.is_set() or self.cfg != cfg:
+                    raise ValueError('scan_interrupted')
+                try:
+                    probe = self._candidate_probe(cfg, node)
+                except Exception:
+                    probe = dict(ok=False, error='candidate_probe_failed')
+                result = dict(probe, node=node, tested_at=time.time())
+                if probe['ok']:
+                    ip = probe['ip']
+                    if ip not in intel_cache:
+                        intel_cache[ip] = wb_ipintel.lookup(ip)
+                    result.update(intel_cache[ip])
+                results.append(result)
+                with self.lock:
+                    self.ranking.update(done=len(results), results=copy.deepcopy(results))
+                    self._persist()
+            ranked = rank_exits(results, cfg['residential_tie_pct'])
+            with self.lock:
+                self.ranking.update(ranked=ranked, completed_at=time.time())
+            return ranked
+        finally:
+            with self.lock:
+                self.ranking['scanning'] = False
+                self._persist()
+            if original:
+                self._select(cfg, cfg['probe_group'], original)
+
+    def _ranked_check(self, cfg, slots, proxy_map, providers, rows):
+        targets = [s for s in slots if s.get('enabled') and s['id'] in cfg['groups']]
+        for slot in targets:
+            row = rows[slot['id']]
+            group = cfg['groups'][slot['id']]
+            row['node'] = proxy_map.get(group, {}).get('now', '')
+            if row['failures'] >= cfg['failures']:
+                confirm = self._probe(slot['url'], cfg['timeout'], 1)
+                if confirm['ok']:
+                    row.update(confirm, status='healthy', failures=0, slow_count=0, error='', last_success=time.time())
+                    row['ip_node'] = row['node']
+                else:
+                    row['status'] = 'unavailable'
+        self._publish(rows)
+        if not proxy_map:
+            return
+        age = time.time() - self.ranking.get('completed_at', 0)
+        needs_spare = any(rows[s['id']]['status'] == 'unavailable' or
+                          rows[s['id']].get('slow_count', 0) >= cfg['slow_failures'] for s in targets)
+        full = age >= cfg['rank_interval'] or (needs_spare and age >= max(300, cfg['interval']))
+        try:
+            ranked = (self._scan_candidates(cfg, proxy_map, providers) if full
+                      else copy.deepcopy(self.ranking.get('ranked', [])))
+        except Exception:
+            self.error = 'ranking_scan_failed; no selector changes performed'
+            return
+        if not full:
+            # Retire failed scores and update sustained slow scores before choosing
+            # the target set. Otherwise the next round could rotate back to the
+            # same slow exit using its obsolete fast score.
+            with self.lock:
+                results = copy.deepcopy(self.ranking.get('results', []))
+                for slot in targets:
+                    row = rows[slot['id']]
+                    if row['status'] != 'unavailable' and row.get('slow_count', 0) < cfg['slow_failures']:
+                        continue
+                    for result in results:
+                        if result['node'] == row.get('node'):
+                            result.update(ok=row['status'] != 'unavailable', tested_at=time.time())
+                            if result['ok']:
+                                result.update(latency_ms=row['latency_ms'], ip=row['ip'])
+                ranked = rank_exits(results, cfg['residential_tie_pct'])
+                self.ranking.update(results=results, ranked=ranked)
+        # Measurements can take minutes. Refresh reservations before committing;
+        # selectors/slot edits are independently reconciled on every write.
+        if full:
+            for slot in slots:
+                probe = self._probe(slot['url'], cfg['timeout'])
+                if probe['ok']:
+                    rows[slot['id']].update(probe, status='healthy', failures=0, last_success=time.time())
+        reserved = {rows[s['id']].get('ip') for s in slots if s not in targets}
+        usable = [r for r in ranked if r['ip'] not in reserved]
+        desired = usable[:len(targets)]
+        desired_ips = {r['ip'] for r in desired}
+        for slot in targets:
+            if self.stop_event.is_set() or self.cfg != cfg:
+                return
+            row = rows[slot['id']]
+            bad = row['status'] == 'unavailable'
+            slow = row.get('slow_count', 0) >= cfg['slow_failures']
+            peers = [rows[s['id']] for s in slots if s['id'] != slot['id']]
+            duplicate = any(p.get('ip') == row.get('ip') for p in peers)
+            optimize = not any(r['ip'] == row.get('ip') and r['node'] == row.get('node') for r in desired)
+            if not (bad or slow or duplicate or optimize):
+                continue
+            if time.time() - row.get('last_switch', 0) < cfg['cooldown']:
+                row['error'] = 'switch_cooldown'
+                continue
+            pool = usable if bad or slow else desired
+            choices = [r for r in pool if r['node'] != row.get('node')]
+            if slow and not bad and not full:
+                choices = [r for r in choices if r['latency_ms'] <= row.get('latency_ms', 0) *
+                           (1 - cfg['improvement_pct'] / 100)]
+            switched = self._ranked_switch(cfg, slot, slots, proxy_map, rows, choices,
+                                           'unavailable' if bad else 'slow' if slow else 'ranking')
+            if not switched and not row.get('error'):
+                row['error'] = 'no_unique_healthy_spare' if bad else 'no_better_unique_exit'
+        with self.lock:
+            self.ranking['assigned'] = len({rows[s['id']].get('ip') for s in targets
+                if rows[s['id']].get('status') == 'healthy' and any(
+                    r['ip'] == rows[s['id']].get('ip') and r['node'] == rows[s['id']].get('node') for r in desired)})
+            self.ranking['target'] = len(targets)
+            self.ranking['eligible_unique'] = len(usable)
+            self.ranking['constrained'] = not cfg['allow_cross_country']
+
+    def _ranked_switch(self, cfg, slot, slots, proxy_map, rows, candidates, reason):
+        sid, group = slot['id'], cfg['groups'][slot['id']]
+        row = rows[sid]
+        old = proxy_map.get(group, {}).get('now')
+        original_status = row['status']
+        spare = proxy_map.get(cfg['probe_group'], {})
+        original_spare = spare.get('now')
+        if (proxy_map.get(group, {}).get('type') != 'Selector' or spare.get('type') != 'Selector'
+                or cfg['probe_proxy'] in [s['url'] for s in slots]):
+            row['error'] = 'dedicated_probe_selector_required'
+            return False
+        peers = [rows[s['id']] for s in slots if s['id'] != sid]
+        if any(not p.get('ip') or not p.get('last_success') for p in peers):
+            row['error'] = 'peer_exit_unknown'
+            return False
+        occupied = {p['ip'] for p in peers}
+        used = {proxy_map.get(g, {}).get('now') for g in cfg['groups'].values()}
+        try:
+            for candidate in candidates:
+                node = candidate['node']
+                if (node in used or candidate['ip'] in occupied
+                        or node not in proxy_map[group].get('all', [])):
+                    continue
+                if not cfg['allow_cross_country'] and (not slot.get('country_code') or
+                        candidate.get('country_code') != slot['country_code']):
+                    continue
+                changed = False
+                try:
+                    # Re-probe even cached candidates: a subscription's exit may rotate.
+                    probe = self._candidate_probe(cfg, node)
+                    if not probe['ok'] or probe['ip'] != candidate['ip'] or probe['ip'] in occupied:
+                        with self.lock:
+                            for result in self.ranking.get('results', []):
+                                if result['node'] == node:
+                                    result['ok'] = False
+                            self.ranking['ranked'] = rank_exits(self.ranking.get('results', []), cfg['residential_tie_pct'])
+                        continue
+                    if reason == 'slow' and probe['latency_ms'] > row.get('latency_ms', 0) * (1 - cfg['improvement_pct'] / 100):
+                        continue
+                    live = self._api(cfg, '/proxies')['proxies']
+                    if wb_settings.proxy_slots(self.hub.ACCOUNTS_DIR) != slots or any(
+                            live.get(g, {}).get('now') != proxy_map.get(g, {}).get('now') for g in cfg['groups'].values()):
+                        row['error'] = 'configuration_changed; retry next round'
+                        return False
+                    for peer in slots:
+                        g = cfg['groups'].get(peer['id'])
+                        if peer['id'] != sid and g and rows[peer['id']].get('ip_node') != live.get(g, {}).get('now'):
+                            row['error'] = 'peer_exit_unknown'
+                            return False
+                    row['status'] = 'switching'
+                    self._publish(rows)
+                    changed = True
+                    self._select(cfg, group, node)
+                    verify = self._probe(slot['url'], cfg['timeout'])
+                    if not verify['ok'] or verify['ip'] != probe['ip'] or verify['ip'] in occupied:
+                        self._select(cfg, group, old)
+                        row['status'] = original_status
+                        continue
+                    stamp = time.time()
+                    intel = {k: candidate.get(k, '') for k in wb_ipintel.FIELDS}
+                    wb_settings.update_proxy_slot(self.hub.ACCOUNTS_DIR, sid,
+                        dict(ip=verify['ip'], probed_at=int(stamp), **intel))
+                    row.update(verify, status='healthy', failures=0, slow_count=0, node=node,
+                               ip_node=node, error='', last_switch=stamp, last_success=stamp,
+                               checked_at=stamp, generation=time.time_ns())
+                    proxy_map[group]['now'] = node
+                    slots[:] = wb_settings.proxy_slots(self.hub.ACCOUNTS_DIR)
+                    self._record(sid, reason, old_node=old, node=node, old_ip=slot.get('ip', ''), ip=verify['ip'])
+                    self._publish(rows)
+                    return True
+                except Exception:
+                    row['status'] = original_status
+                    if changed:
+                        try:
+                            self._select(cfg, group, old)
+                        except Exception:
+                            row.update(status='unavailable', error='selector_state_unknown')
+                            return False
+            return False
+        finally:
+            if original_spare:
+                try:
+                    self._select(cfg, cfg['probe_group'], original_spare)
+                except Exception:
+                    pass
 
     def _replace(self, cfg, slot, slots, proxy_map, providers, rows):
         sid = slot['id']
@@ -581,7 +839,7 @@ def route(hub, handler, method):
             if path == '/proxy/health/config':
                 mon.configure(payload)
             elif path == '/proxy/health/check':
-                mon.trigger()
+                mon.trigger(rescan=payload.get('rescan') is True)
             else:
                 handler._error(405, 'method not allowed')
                 return True

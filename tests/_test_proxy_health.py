@@ -271,6 +271,133 @@ class HealthTests(unittest.TestCase):
             U.urlopen(request, proxy=self.slots[0]['url'])
         self.assertIn(':exit-42', acquire.call_args.args[0][-1])
 
+    def ranked_fixture(self):
+        self.mon.cfg.update(ranked=True, allow_cross_country=True)
+        self.ips['old-1'] = '8.8.8.1'
+        self.delays = {'old-1': 900, 'old-2': 800, 'duplicate': 2000, 'new-1': 100, 'new-2': 200}
+        original = self.mon._probe
+        def delayed(url, timeout, endpoint=0):
+            out = original(url, timeout, endpoint)
+            group = {17901:'g1', 17902:'g2', 17990:'Gateway spare probe'}[urllib.parse.urlsplit(url).port]
+            if out['ok']:
+                out['latency_ms'] = self.delays[self.nodes[group]]
+            return out
+        self.mon._probe = delayed
+
+    def test_ranking_scans_all_nodes_and_assigns_fastest_unique_exits(self):
+        self.ranked_fixture()
+        self.mon.cfg['candidate_limit'] = 1  # Legacy random-sample cap must not truncate a full scan.
+        self.rounds(1)
+        self.assertEqual({self.nodes['g1'], self.nodes['g2']}, {'new-1', 'new-2'})
+        ranking = self.mon.view()['ranking']
+        self.assertEqual(ranking['done'], len(self.ips))
+        self.assertEqual(len(ranking['ranked']), 4)
+        self.assertEqual(ranking['assigned'], 2)
+        self.assertEqual(self.nodes['Gateway spare probe'], 'REJECT')
+        self.assertEqual(len({r['ip'] for r in self.mon.rows.values()}), 2)
+        before = list(self.calls)
+        self.rounds(1)
+        self.assertEqual(before, self.calls, 'Healthy top nodes must stay selected between scans')
+
+    def test_residential_preference_cannot_chain_past_tie_boundary(self):
+        rows = [dict(ok=True, node=n, ip=str(i), latency_ms=delay, ip_type=kind)
+                for i, (n, delay, kind) in enumerate([
+                    ('a', 100, 'datacenter'), ('b', 109, 'residential'),
+                    ('c', 118, 'residential'), ('d', 200, 'residential')])]
+        ranked = H.rank_exits(rows, 10)
+        self.assertEqual([r['node'] for r in ranked], ['b', 'a', 'c', 'd'])
+        self.assertEqual([r['node'] for r in H.rank_exits(rows, 0)], ['a', 'b', 'c', 'd'])
+
+    def test_slow_threshold_and_fresh_improvement_are_required(self):
+        self.ranked_fixture()
+        self.rounds(1)
+        self.mon.rows['slot-1']['last_switch'] = 0
+        self.delays[self.nodes['g1']] = 2000
+        self.rounds(2)
+        old = self.nodes['g1']
+        self.assertEqual(self.mon.rows['slot-1']['slow_count'], 2)
+        self.rounds(1)
+        self.assertNotEqual(self.nodes['g1'], old)
+        self.assertEqual(self.mon.rows['slot-1']['slow_count'], 0)
+        self.assertEqual(self.mon.history[-1]['reason'], 'slow')
+        replacement = self.nodes['g1']
+        self.mon.rows['slot-1']['last_switch'] = 0
+        self.rounds(1)
+        self.assertEqual(self.nodes['g1'], replacement, 'Never rotate back using an obsolete fast score')
+
+    def test_ranking_respects_cooldown_country_and_disabled_reservations(self):
+        self.ranked_fixture()
+        self.slots[1]['enabled'] = False
+        S.set_proxy_slots(self.tmp.name, self.slots)
+        self.mon.rows['slot-1'] = dict(last_switch=H.time.time())
+        self.rounds(1)
+        self.assertEqual(self.nodes['g1'], 'old-1')
+        self.assertEqual(self.nodes['g2'], 'old-2')
+        self.mon.rows['slot-1']['last_switch'] = 0
+        self.mon.cfg['allow_cross_country'] = False
+        self.slots[0]['country_code'] = 'JP'
+        S.set_proxy_slots(self.tmp.name, self.slots)
+        self.rounds(1)
+        self.assertEqual(self.nodes['g1'], 'old-1')
+        self.mon.cfg['allow_cross_country'] = True
+        self.rounds(1)
+        self.assertEqual(self.nodes['g1'], 'new-1')
+        self.assertEqual(self.nodes['g2'], 'old-2')
+
+    def test_cached_exit_ip_change_is_not_committed(self):
+        self.ranked_fixture()
+        self.rounds(1)
+        self.mon.rows['slot-1']['last_switch'] = 0
+        old = self.nodes['g1']
+        self.delays[old] = 2000
+        # Leave no unchanged candidate except the other slot's occupied exit.
+        for node in ('old-1', 'old-2', 'duplicate'):
+            self.ips[node] = '9.9.9.9'
+        self.rounds(3)
+        self.assertEqual(self.nodes['g1'], old)
+        self.assertTrue(self.mon.allow(self.slots[0]['url']), 'Slow but reachable slots stay available')
+
+    def test_ranked_verification_failure_rolls_back_and_preserves_working_slot(self):
+        self.ranked_fixture()
+        original = self.mon._probe
+        def flaky(url, timeout, endpoint=0):
+            if ':17901' in url and self.nodes['g1'].startswith('new-'):
+                return dict(ok=False, error='exit_probe_failed')
+            return original(url, timeout, endpoint)
+        self.mon._probe = flaky
+        self.rounds(1)
+        self.assertEqual(self.nodes['g1'], 'old-1')
+        self.assertTrue(self.mon.allow(self.slots[0]['url']))
+        self.assertEqual(self.nodes['Gateway spare probe'], 'REJECT')
+
+    def test_ranking_manual_change_during_scan_aborts_commits(self):
+        self.ranked_fixture()
+        original = self.mon._candidate_probe
+        def edited(cfg, node):
+            value = original(cfg, node)
+            self.nodes['g2'] = 'duplicate'
+            return value
+        self.mon._candidate_probe = edited
+        self.rounds(1)
+        self.assertEqual(self.nodes['g1'], 'old-1')
+        self.assertNotIn(('g1', 'new-1'), self.calls)
+
+    def test_ranking_insufficient_unique_exits_never_uses_direct_or_duplicates(self):
+        self.ranked_fixture()
+        self.ips = {n:'8.8.8.2' for n in self.ips}
+        self.rounds(1)
+        self.assertEqual(len(self.mon.ranking['ranked']), 1)
+        self.assertNotIn(('g1', 'new-1'), self.calls)
+        self.assertEqual(self.nodes['g1'], 'old-1')
+        self.assertLess(self.mon.ranking['assigned'], 2)
+
+    def test_ranking_config_bounds_and_default_off(self):
+        self.assertFalse(H.validate({})['ranked'])
+        for field, value in [('ranked', 1), ('rank_interval', 299), ('slow_ms', True),
+                             ('slow_failures', 1), ('residential_tie_pct', 21), ('improvement_pct', 91)]:
+            with self.assertRaises(ValueError):
+                H.validate({field:value})
+
 
 if __name__ == '__main__':
     unittest.main()

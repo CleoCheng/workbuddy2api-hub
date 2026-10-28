@@ -1579,8 +1579,17 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     "代理绑定已保存": "Proxy binding saved",
     "暂无可用模型": "No available models",
     "代理健康检查与自动切换": "Proxy health checks and failover",
-    "仅在确认出口故障后切换；按实际 IP 去重，备用不足时暂停该槽位，账号绑定保持不变。": "Switch only after confirming an exit failure; deduplicate actual IPs and pause slots without a spare. Account bindings stay fixed.",
+    "故障复核后自动切换；排名模式还可优化慢节点。按实际 IP 去重，无备用的故障槽暂停新请求，账号绑定保持不变。": "Confirmed failures trigger failover; ranking can also optimize slow nodes. Deduplicate actual IPs and pause failed slots without a spare. Account bindings stay fixed.",
     "启用代理健康检查": "Enable proxy health checks",
+    "按订阅全量测速排名选节点": "Select nodes by full subscription latency ranking",
+    "全量测速间隔（秒）": "Full scan interval (seconds)",
+    "高延迟阈值（ms）": "High latency threshold (ms)",
+    "连续高延迟次数": "Consecutive slow checks",
+    "备用至少快（%）": "Minimum spare improvement (%)",
+    "住宅优先接近范围（%）": "Residential latency tie range (%)",
+    "全量测速并重新排名": "Scan all nodes and rank",
+    "订阅节点实测排名": "Measured subscription node ranking",
+    "排名模式遍历订阅全部节点，按实际出口 IP 去重；延迟接近时住宅优先。保留固定端口和账号绑定，冷却期间等待后续检查收敛。": "Ranking scans all subscription nodes and deduplicates actual exit IPs; residential IPs win close latency ties. Ports and account bindings stay fixed. Cooldowns may delay convergence.",
     "允许跨国家切换": "Allow country changes",
     "检查间隔（秒）": "Check interval (seconds)",
     "连续失败阈值": "Consecutive failure threshold",
@@ -3021,8 +3030,17 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     "代理绑定已保存": "代理繫結已儲存",
     "暂无可用模型": "暫無可用模型",
     "代理健康检查与自动切换": "代理健康檢查與自動切換",
-    "仅在确认出口故障后切换；按实际 IP 去重，备用不足时暂停该槽位，账号绑定保持不变。": "僅在確認出口故障後切換；按實際 IP 去重，備用不足時暫停該槽位，帳號繫結保持不變。",
+    "故障复核后自动切换；排名模式还可优化慢节点。按实际 IP 去重，无备用的故障槽暂停新请求，账号绑定保持不变。": "故障複核後自動切換；排名模式還可最佳化慢節點。按實際 IP 去重，無備用的故障槽暫停新請求，帳號繫結保持不變。",
     "启用代理健康检查": "啟用代理健康檢查",
+    "按订阅全量测速排名选节点": "按訂閱全量測速排名選節點",
+    "全量测速间隔（秒）": "全量測速間隔（秒）",
+    "高延迟阈值（ms）": "高延遲閾值（ms）",
+    "连续高延迟次数": "連續高延遲次數",
+    "备用至少快（%）": "備用至少快（%）",
+    "住宅优先接近范围（%）": "住宅優先接近範圍（%）",
+    "全量测速并重新排名": "全量測速並重新排名",
+    "订阅节点实测排名": "訂閱節點實測排名",
+    "排名模式遍历订阅全部节点，按实际出口 IP 去重；延迟接近时住宅优先。保留固定端口和账号绑定，冷却期间等待后续检查收敛。": "排名模式遍歷訂閱全部節點，按實際出口 IP 去重；延遲接近時住宅優先。保留固定埠和帳號繫結，冷卻期間等待後續檢查收斂。",
     "允许跨国家切换": "允許跨國家切換",
     "检查间隔（秒）": "檢查間隔（秒）",
     "连续失败阈值": "連續失敗閾值",
@@ -5135,15 +5153,24 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
       <div id="slotDiscover"></div>
       <details style="margin-top:18px" id="proxyHealthDetails">
         <summary>代理健康检查与自动切换</summary>
-        <p>仅在确认出口故障后切换；按实际 IP 去重，备用不足时暂停该槽位，账号绑定保持不变。</p>
+        <p>故障复核后自动切换；排名模式还可优化慢节点。按实际 IP 去重，无备用的故障槽暂停新请求，账号绑定保持不变。</p>
         <div style="display:flex;gap:14px;flex-wrap:wrap;margin:12px 0">
           <label><input type="checkbox" id="proxyHealthEnabled" onchange="PROXY_HEALTH_DIRTY=true"> 启用代理健康检查</label>
           <label><input type="checkbox" id="proxyHealthCross" onchange="PROXY_HEALTH_DIRTY=true"> 允许跨国家切换</label>
+          <label><input type="checkbox" id="proxyHealthRanked" onchange="PROXY_HEALTH_DIRTY=true"> 按订阅全量测速排名选节点</label>
           <label>检查间隔（秒） <input id="proxyHealthInterval" type="number" min="30" max="3600" value="90" style="width:90px" oninput="PROXY_HEALTH_DIRTY=true"></label>
           <label>连续失败阈值 <input id="proxyHealthFailures" type="number" min="2" max="10" value="3" style="width:70px" oninput="PROXY_HEALTH_DIRTY=true"></label>
           <label>切换冷却（秒） <input id="proxyHealthCooldown" type="number" min="60" max="3600" value="600" style="width:90px" oninput="PROXY_HEALTH_DIRTY=true"></label>
           <label>探测超时（秒） <input id="proxyHealthTimeout" type="number" min="2" max="15" value="5" style="width:70px" oninput="PROXY_HEALTH_DIRTY=true"></label>
           <label>每轮备用节点上限 <input id="proxyHealthLimit" type="number" min="1" max="50" value="12" style="width:70px" oninput="PROXY_HEALTH_DIRTY=true"></label>
+        </div>
+        <p class="hint">排名模式遍历订阅全部节点，按实际出口 IP 去重；延迟接近时住宅优先。保留固定端口和账号绑定，冷却期间等待后续检查收敛。</p>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin:12px 0">
+          <label>全量测速间隔（秒） <input id="proxyHealthRankInterval" type="number" min="300" max="86400" value="1800" style="width:90px" oninput="PROXY_HEALTH_DIRTY=true"></label>
+          <label>高延迟阈值（ms） <input id="proxyHealthSlowMs" type="number" min="100" max="30000" value="1500" style="width:90px" oninput="PROXY_HEALTH_DIRTY=true"></label>
+          <label>连续高延迟次数 <input id="proxyHealthSlowFailures" type="number" min="2" max="10" value="3" style="width:70px" oninput="PROXY_HEALTH_DIRTY=true"></label>
+          <label>备用至少快（%） <input id="proxyHealthImprovement" type="number" min="0" max="90" value="20" style="width:70px" oninput="PROXY_HEALTH_DIRTY=true"></label>
+          <label>住宅优先接近范围（%） <input id="proxyHealthTie" type="number" min="0" max="20" value="10" style="width:70px" oninput="PROXY_HEALTH_DIRTY=true"></label>
         </div>
         <label>Mihomo 控制地址 <input id="proxyHealthController" value="http://127.0.0.1:9090" oninput="PROXY_HEALTH_DIRTY=true"></label>
         <label>独立探测代理 <input id="proxyHealthProbe" value="http://127.0.0.1:17990" oninput="PROXY_HEALTH_DIRTY=true"></label>
@@ -5153,8 +5180,10 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         <p>控制密钥仅保存在服务器 accounts/proxy-health/secret 文件，面板不显示密钥。</p>
         <button class="sec" onclick="saveProxyHealth(this)">保存健康检查配置</button>
         <button class="sec" onclick="checkProxyHealth(this)">立即检查代理</button>
+        <button class="sec" onclick="checkProxyHealth(this,true)">全量测速并重新排名</button>
         <div id="proxyHealthState" role="status" style="margin:10px 0"></div>
         <div id="proxyHealthRows"></div>
+        <details><summary>订阅节点实测排名</summary><div id="proxyHealthRanking" role="status"></div></details>
         <details><summary>代理切换记录</summary><div id="proxyHealthHistory"></div></details>
       </details>
     </section>
@@ -14655,14 +14684,18 @@ async function loadProxyHealth(){
     if(!PROXY_HEALTH_DIRTY){
       document.getElementById('proxyHealthEnabled').checked = !!cfg.enabled;
       document.getElementById('proxyHealthCross').checked = !!cfg.allow_cross_country;
+      document.getElementById('proxyHealthRanked').checked = !!cfg.ranked;
       [['Interval','interval'],['Failures','failures'],['Cooldown','cooldown'],['Timeout','timeout'],
-       ['Limit','candidate_limit'],['Controller','controller'],['Probe','probe_proxy'],['Group','probe_group']]
+       ['Limit','candidate_limit'],['RankInterval','rank_interval'],['SlowMs','slow_ms'],
+       ['SlowFailures','slow_failures'],['Improvement','improvement_pct'],['Tie','residential_tie_pct'],
+       ['Controller','controller'],['Probe','probe_proxy'],['Group','probe_group']]
         .forEach(([id,key]) => { document.getElementById('proxyHealth'+id).value = cfg[key] == null ? '' : cfg[key]; });
       document.getElementById('proxyHealthGroups').value = Object.entries(cfg.groups || {}).map(([k,v]) => k+'='+v).join('\n');
     }
     document.getElementById('proxyHealthState').textContent = (cfg.enabled ? 'enabled' : 'disabled')
       + ' · ' + (data.running ? 'running' : 'stopped')
       + ' · secret: ' + (data.secret_configured ? 'configured' : 'missing')
+      + (data.ranking && data.ranking.scanning ? ' · scanning: '+Number(data.ranking.done || 0)+' / '+Number(data.ranking.total || 0) : '')
       + (data.error ? ' · '+data.error : '');
     document.getElementById('proxyHealthRows').innerHTML = Object.values(data.slots || {}).map(r =>
       '<div class="mono" style="font-size:12px;padding:5px 0">'+esc(r.id)+' · '+esc(r.node || '-')
@@ -14674,6 +14707,15 @@ async function loadProxyHealth(){
       '<div style="font-size:12px;padding:5px 0">'+esc(new Date(r.at*1000).toLocaleString())+' · '+esc(r.slot)
       +' · '+esc(r.reason)+' · '+esc(r.old_node || '')+' → '+esc(r.node || '')
       +' · '+esc(r.old_ip || '')+' → '+esc(r.ip || '')+'</div>').join('');
+    const ranking = data.ranking || {};
+    document.getElementById('proxyHealthRanking').innerHTML = '<p>'+esc(ranking.scanning ? 'scanning' : 'idle')
+      +' · '+Number(ranking.done || 0)+' / '+Number(ranking.total || 0)
+      +' · unique: '+Number(ranking.eligible_unique || (ranking.ranked || []).length)
+      +' · top assigned: '+Number(ranking.assigned || 0)+' / '+Number(ranking.target || 0)
+      +' · '+esc(ranking.completed_at ? new Date(ranking.completed_at*1000).toLocaleString() : '-')+'</p>'
+      +(ranking.ranked || []).map(r => '<div class="mono" style="padding:5px 0;font-size:12px">#'
+        +Number(r.rank)+' · '+esc(r.node)+' · '+Number(r.latency_ms)+' ms · '+esc(r.ip)
+        +' · '+esc(r.country || r.country_code || '')+' · '+esc(ipTypeLabel(r.ip_type))+'</div>').join('');
   }catch(e){
     const state = document.getElementById('proxyHealthState');
     if(state) state.textContent = String(e.message || e);
@@ -14692,8 +14734,11 @@ async function saveProxyHealth(btn){
       groups[id] = line.slice(at+1).trim();
     });
     const body = {enabled:document.getElementById('proxyHealthEnabled').checked,
+                  ranked:document.getElementById('proxyHealthRanked').checked,
                   allow_cross_country:document.getElementById('proxyHealthCross').checked,groups};
-    [['Interval','interval'],['Failures','failures'],['Cooldown','cooldown'],['Timeout','timeout'],['Limit','candidate_limit']]
+    [['Interval','interval'],['Failures','failures'],['Cooldown','cooldown'],['Timeout','timeout'],['Limit','candidate_limit'],
+     ['RankInterval','rank_interval'],['SlowMs','slow_ms'],['SlowFailures','slow_failures'],
+     ['Improvement','improvement_pct'],['Tie','residential_tie_pct']]
       .forEach(([id,key]) => { body[key] = Number(document.getElementById('proxyHealth'+id).value); });
     [['Controller','controller'],['Probe','probe_proxy'],['Group','probe_group']]
       .forEach(([id,key]) => { body[key] = document.getElementById('proxyHealth'+id).value.trim(); });
@@ -14704,9 +14749,9 @@ async function saveProxyHealth(btn){
   finally{ btn.disabled = false; }
 }
 
-async function checkProxyHealth(btn){
+async function checkProxyHealth(btn,rescan){
   btn.disabled = true;
-  try{ await postJSON('/proxy/health/check',{}); await loadProxyHealth(); }
+  try{ await postJSON('/proxy/health/check',{rescan:!!rescan}); await loadProxyHealth(); }
   catch(e){ toast(String(e.message || e),'bad'); }
   finally{ btn.disabled = false; }
 }
