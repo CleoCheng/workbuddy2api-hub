@@ -27,7 +27,7 @@ let adminBehavior=null;
 dom.installDom({
   confirm: () => true,
   fetch: (url, options) => {
-    if(adminBehavior && (String(url).startsWith('/proxy/subscriptions') || String(url).startsWith('/proxy/health/nodes') || url==='/proxy/health/switch' || url==='/accounts/set')) return adminBehavior(url,options);
+    if(adminBehavior && (String(url).startsWith('/proxy/subscriptions') || String(url).startsWith('/proxy/health/nodes') || url==='/proxy/health/switch' || url==='/accounts/set' || url==='/proxy/health/cancel-scan')) return adminBehavior(url,options);
     if(url==='/proxy/slots/test' && testBehavior) return testBehavior(JSON.parse(options.body));
     if(url === '/proxy/health/config') healthSaved = JSON.parse(options.body);
     const payload = String(url).startsWith('/proxy/health') ? health : {current: 'intl', accounts: [], slots: serverSlots, data: [],
@@ -53,6 +53,8 @@ const api = new Function(script + `
     testAllProxySlots,
     openProxyNodeModal,chooseProxyNode,closeProxyNodeModal,resumeProxySlotAuto,
     loadProxySubscriptions,openProxySubscription,closeProxySubscription,saveProxySubscription,
+    deleteProxySubscription,viewSubscriptionNodes,closeSubNodesModal,loadSubNodesData,renderSubNodesList,
+    cancelHealthScan,fmtSubInterval,
     setSlotMaxAccounts,batchSetSlotMaxAccounts,autoAssignSlots,slotPayload,
     slotSelectHtml,slotExitHtml,autoSlotName,slotGroupTag,
     batchFixture: rows => {PROXY_SLOTS=rows;SLOTS_DIRTY=false;},
@@ -218,6 +220,10 @@ const api = new Function(script + `
     if(url.startsWith('/proxy/health/nodes'))payload={id:'manual-slot',current:'old',manual:false,nodes:[
       {node:'<script>node</script>',ip:'8.8.8.8',latency_ms:100,country:'US',selectable:true},
       {node:'occupied',ip:'8.8.4.4',latency_ms:90,selectable:false,unavailable_reason:'exit_occupied'}]};
+    if(url.startsWith('/proxy/subscriptions/nodes'))payload={name:'test-sub',count:1,nodes:[
+      {name:'[B] test-node-1',type:'Shadowsocks',latency_ms:120,ip:'1.2.3.4',country:'US',alive:true}]};
+    if(url==='/proxy/health/cancel-scan')payload={ok:true,cancelled:true};
+    if(url==='/proxy/subscriptions/delete')payload={available:true,providers:[]};
     if(options && options.body) calls.push({url,body:JSON.parse(options.body)});
     return {status:200,ok:true,json:async()=>payload,text:async()=>JSON.stringify(payload)};
   };
@@ -245,6 +251,28 @@ const api = new Function(script + `
   document.getElementById('proxySubscriptionURL').value='https://private.example/sub?token=secret';
   api.closeProxySubscription();
   assert.equal(document.getElementById('proxySubscriptionURL').value,'','closing the editor clears subscription credentials');
+
+  // Subscription interval units formatting
+  assert.equal(api.fmtSubInterval(86400), '1 天');
+  assert.equal(api.fmtSubInterval(21600), '6 小时');
+  assert.equal(api.fmtSubInterval(1800), '30 分钟');
+
+  // View subscription nodes
+  await api.viewSubscriptionNodes(0);
+  assert.ok(document.getElementById('proxySubNodesModal').classList.contains('show'));
+  assert.ok(document.getElementById('proxySubNodesList').innerHTML.includes('[B] test-node-1'));
+  assert.ok(document.getElementById('proxySubNodesList').innerHTML.includes('120 ms'));
+  api.closeSubNodesModal();
+  assert.ok(!document.getElementById('proxySubNodesModal').classList.contains('show'));
+
+  // Delete subscription
+  await api.deleteProxySubscription(0, {disabled: false});
+  const delCall = calls.find(c => c.url === '/proxy/subscriptions/delete');
+  assert.deepEqual(delCall.body, {name: 'test-sub'});
+
+  // Cancel background health scan
+  await api.cancelHealthScan({disabled: false});
+  assert.ok(calls.some(c => c.url === '/proxy/health/cancel-scan'));
 
   // Max accounts column & batch limit configuration
   api.batchFixture([

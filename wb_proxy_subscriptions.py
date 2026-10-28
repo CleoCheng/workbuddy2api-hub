@@ -141,7 +141,9 @@ def _restore_selectors(mon, cfg, selected, rows):
 
 
 def change(mon, payload, refresh=False):
-    if not mon.run_lock.acquire(blocking=False):
+    if mon.ranking.get('scanning'):
+        mon.cancel_scan()
+    if not mon.run_lock.acquire(timeout=0.5):
         raise ValueError('health_check_busy')
     try:
         path, old = _load()
@@ -170,7 +172,7 @@ def change(mon, payload, refresh=False):
             raise ValueError('http_subscription_required')
         enabled = payload.get('enabled', True)
         interval = payload.get('interval', 3600)
-        if not isinstance(enabled, bool) or isinstance(interval, bool) or not isinstance(interval, int) or not 300 <= interval <= 86400:
+        if not isinstance(enabled, bool) or isinstance(interval, bool) or not isinstance(interval, int) or not 300 <= interval <= 2592000:
             raise ValueError('subscription_interval_or_enabled_invalid')
         raw_url = str(payload.get('url', '')).strip()
         url = _url(raw_url) if raw_url else (existing or {}).get('url')
@@ -249,3 +251,121 @@ def change(mon, payload, refresh=False):
         return view(mon)
     finally:
         mon.run_lock.release()
+
+
+def delete(mon, payload):
+    if mon.ranking.get('scanning'):
+        mon.cancel_scan()
+    if not mon.run_lock.acquire(timeout=0.5):
+        raise ValueError('health_check_busy')
+    try:
+        path, old = _load()
+        name = str(payload.get('name', '')).strip()
+        if not name:
+            raise ValueError('subscription_name_invalid')
+        providers = old.get('proxy-providers', {})
+        if name not in providers:
+            raise ValueError('subscription_not_found')
+        cfg = copy.deepcopy(mon.cfg)
+        data = copy.deepcopy(old)
+        managed = _groups(mon)
+        for group in data.get('proxy-groups', []):
+            if group.get('name') not in managed:
+                continue
+            uses = [n for n in group.get('use', []) if n != name]
+            if not uses:
+                raise ValueError('at_least_one_subscription_required')
+            group['use'] = uses
+        del data['proxy-providers'][name]
+        _validate_native(path, data)
+        attributes = path.stat()
+        backups = mon.root / 'config-backups'
+        backups.mkdir(parents=True, exist_ok=True, mode=0o700)
+        backup = backups / ('%s.json' % time.time_ns())
+        backup.write_text(json.dumps(old, ensure_ascii=False), encoding='utf-8')
+        os.chmod(str(backup), 0o600)
+        for previous in sorted(backups.glob('*.json'))[:-5]:
+            previous.unlink()
+        live = mon._api(cfg, '/proxies')['proxies']
+        selected = {g: v.get('now') for g, v in live.items() if v.get('type') == 'Selector'}
+        with mon.lock:
+            rows = copy.deepcopy(mon.rows)
+            old_rows = copy.deepcopy(mon.rows)
+        for row in rows.values():
+            row['status'] = 'switching'
+        mon._publish(rows)
+        try:
+            _write(path, data, attributes)
+            mon._api(dict(cfg, timeout=60), '/configs?force=true', {'payload': json.dumps(data, ensure_ascii=False)})
+            rows = copy.deepcopy(old_rows)
+            _restore_selectors(mon, cfg, selected, rows)
+            mon._publish(rows)
+        except Exception:
+            _write(path, old, attributes)
+            mon._api(dict(cfg, timeout=60), '/configs?force=true', {'payload': json.dumps(old, ensure_ascii=False)})
+            _restore_selectors(mon, cfg, selected, old_rows)
+            mon._publish(old_rows)
+            raise ValueError('subscription_apply_failed_rolled_back') from None
+        mon._record('subscriptions', 'subscription_deleted')
+        mon.trigger(rescan=True)
+        return view(mon)
+    finally:
+        mon.run_lock.release()
+
+
+def nodes(mon, name):
+    name = str(name or '').strip()
+    if not name:
+        raise ValueError('subscription_name_invalid')
+    try:
+        live = mon._api(mon.cfg, '/providers/proxies')['providers']
+    except Exception:
+        live = {}
+    provider = live.get(name)
+    if not provider:
+        raise ValueError('subscription_not_found')
+    with mon.lock:
+        ranking = copy.deepcopy(mon.ranking)
+    tested_map = {}
+    for r in ranking.get('ranked', []) + ranking.get('results', []):
+        if r.get('node'):
+            tested_map[r['node']] = r
+    out = []
+    for p in provider.get('proxies', []):
+        node_name = p.get('name', '')
+        history = p.get('history', [])
+        latest_delay = history[-1].get('delay') if history else None
+        tested = tested_map.get(node_name) or {}
+        latency = tested.get('latency_ms') or latest_delay or 0
+        ip = tested.get('ip') or ''
+        country = tested.get('country') or ''
+        ip_type = tested.get('ip_type') or ''
+        out.append({
+            'name': node_name,
+            'type': p.get('type', ''),
+            'latency_ms': latency,
+            'ip': ip,
+            'country': country,
+            'ip_type': ip_type,
+            'alive': p.get('alive', True),
+        })
+    return {
+        'name': name,
+        'count': len(out),
+        'nodes': out,
+        'scanning': ranking.get('scanning', False),
+        'vehicleType': provider.get('vehicleType', ''),
+        'updatedAt': provider.get('updatedAt', ''),
+    }
+
+
+def test_nodes(mon, name):
+    name = str(name or '').strip()
+    if not name:
+        raise ValueError('subscription_name_invalid')
+    try:
+        mon._api(dict(mon.cfg, timeout=60), '/providers/proxies/' + urllib.parse.quote(name, safe='') + '/healthcheck', {})
+    except Exception:
+        pass
+    mon.trigger(rescan=True)
+    return nodes(mon, name)

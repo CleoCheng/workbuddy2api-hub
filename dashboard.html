@@ -1597,10 +1597,31 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     "编辑代理订阅": "Edit proxy subscription",
     "订阅名称": "Subscription name",
     "订阅地址": "Subscription URL",
+    "订阅刷新间隔": "Subscription refresh interval",
     "订阅刷新间隔（秒）": "Subscription refresh interval (seconds)",
     "将此订阅加入出口组": "Use this subscription in exit groups",
     "保存并应用订阅": "Save and apply subscription",
     "更换": "Change",
+    "查看节点": "View nodes",
+    "订阅节点清单": "Subscription nodes",
+    "订阅节点清单: ": "Subscription nodes: ",
+    "刷新节点测速": "Test node latencies",
+    "测速中…": "Testing…",
+    "已刷新节点测速。": "Node latencies tested.",
+    "中止测速": "Cancel scan",
+    "已中止测速": "Scan cancelled",
+    "全量测速中": "Full scan running",
+    "订阅已删除。": "Subscription deleted.",
+    "刷新周期: ": "Interval: ",
+    "协议类型": "Protocol",
+    "地区": "Region",
+    "未测速": "Untested",
+    "没有匹配的节点": "No matching nodes",
+    "正在加载节点清单…": "Loading nodes…",
+    "正在测试节点延迟…": "Testing node latencies…",
+    "天": "days",
+    "小时": "hours",
+    "分钟": "minutes",
     "刷新订阅": "Refresh subscription",
     "正在应用订阅…": "Applying subscription…",
     "订阅已应用，正在更新节点排名。": "Subscription applied; updating node rankings.",
@@ -3111,10 +3132,31 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     "编辑代理订阅": "編輯代理訂閱",
     "订阅名称": "訂閱名稱",
     "订阅地址": "訂閱位址",
+    "订阅刷新间隔": "訂閱重新整理間隔",
     "订阅刷新间隔（秒）": "訂閱重新整理間隔（秒）",
     "将此订阅加入出口组": "將此訂閱加入出口組",
     "保存并应用订阅": "儲存並套用訂閱",
     "更换": "更換",
+    "查看节点": "查看節點",
+    "订阅节点清单": "訂閱節點清單",
+    "订阅节点清单: ": "訂閱節點清單: ",
+    "刷新节点测速": "重新整理節點測速",
+    "测速中…": "測速中…",
+    "已刷新节点测速。": "已重新整理節點測速。",
+    "中止测速": "中止測速",
+    "已中止测速": "已中止測速",
+    "全量测速中": "全量測速中",
+    "订阅已删除。": "訂閱已刪除。",
+    "刷新周期: ": "重新整理週期: ",
+    "协议类型": "通訊協定類型",
+    "地区": "地區",
+    "未测速": "未測速",
+    "没有匹配的节点": "沒有相符的節點",
+    "正在加载节点清单…": "正在載入節點清單…",
+    "正在测试节点延迟…": "正在測試節點延遲…",
+    "天": "天",
+    "小时": "小時",
+    "分钟": "分鐘",
     "刷新订阅": "重新整理訂閱",
     "正在应用订阅…": "正在套用訂閱…",
     "订阅已应用，正在更新节点排名。": "訂閱已套用，正在更新節點排名。",
@@ -6361,11 +6403,35 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
       <p class="hint">支持同时使用多个订阅。订阅地址含访问凭证，仅在服务器保存；修改时留空保留原地址。</p>
       <label>订阅名称 <input id="proxySubscriptionName" maxlength="40" autocomplete="off"></label>
       <label>订阅地址 <input id="proxySubscriptionURL" type="password" autocomplete="new-password" placeholder="https://…" style="width:100%"></label>
-      <label>订阅刷新间隔（秒） <input id="proxySubscriptionInterval" type="number" min="300" max="86400" value="3600"></label>
+      <label>订阅刷新间隔
+        <span style="display:inline-flex;gap:6px;align-items:center;vertical-align:middle;margin-left:4px">
+          <input id="proxySubscriptionIntervalVal" type="number" min="1" max="1000" value="1" style="width:70px" oninput="syncProxySubscriptionInterval()">
+          <select id="proxySubscriptionIntervalUnit" class="mini-select" style="padding:4px 8px" onchange="syncProxySubscriptionInterval()">
+            <option value="86400">天</option>
+            <option value="3600" selected>小时</option>
+            <option value="60">分钟</option>
+          </select>
+        </span>
+        <input type="hidden" id="proxySubscriptionInterval" value="3600">
+      </label>
       <label><input id="proxySubscriptionEnabled" type="checkbox" checked> 将此订阅加入出口组</label>
       <div id="proxySubscriptionSaveState" role="status"></div>
     </div>
     <div class="modal-ft"><button class="sec" onclick="closeProxySubscription()">取消</button><button onclick="saveProxySubscription(this)">保存并应用订阅</button></div>
+  </div>
+</div>
+<div class="modal-mask" id="proxySubNodesModal" onkeydown="if(event.key==='Escape')closeSubNodesModal()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="proxySubNodesTitle" style="width:min(900px,96vw)">
+    <div class="modal-hd"><h2 id="proxySubNodesTitle">订阅节点清单</h2><button class="modal-x" onclick="closeSubNodesModal()" aria-label="关闭">×</button></div>
+    <div class="modal-bd" style="max-height:65vh;overflow:auto">
+      <div id="proxySubNodesState" role="status" style="margin-bottom:8px"></div>
+      <label>筛选节点 <input id="proxySubNodesFilter" oninput="renderSubNodesList()" placeholder="搜索节点名称、类型或 IP"></label>
+      <div id="proxySubNodesList"></div>
+    </div>
+    <div class="modal-ft">
+      <button class="sec" onclick="refreshCurrentSubNodes(this)">刷新节点测速</button>
+      <button class="sec" onclick="closeSubNodesModal()">关闭</button>
+    </div>
   </div>
 </div>
 <div class="modal-mask" id="loginModal">
@@ -15211,21 +15277,33 @@ let PROXY_SUBSCRIPTIONS=[], PROXY_SUBSCRIPTIONS_LOADING=false, PROXY_SUBSCRIPTIO
 let PROXY_NODE_SLOT='', PROXY_NODE_DATA=null, PROXY_NODE_BUSY=false;
 function proxyAdminError(error){
   const code=String(error && error.message || error);
-  const messages={health_check_busy:'健康检查正在运行，请等待结束后重试。',
+  const messages={health_check_busy:'健康检查或测速正在进行中，可稍后重试或点击「中止测速」。',
     subscription_management_not_configured:'订阅管理尚未在服务器启用。',
     managed_mihomo_config_required:'服务器订阅配置格式尚未准备好。',
     public_https_subscription_required:'请输入有效的公网 HTTPS 订阅地址。',
     subscription_name_invalid:'订阅名称只能包含文字、数字、下划线或短横线，最长 40 个字符。',
-    subscription_interval_or_enabled_invalid:'订阅刷新间隔必须为 300 至 86400 秒。',
+    subscription_interval_or_enabled_invalid:'订阅刷新间隔必须为 5 分钟至 30 天。',
     subscription_apply_failed_rolled_back:'订阅应用失败，已恢复原配置。请检查地址和订阅格式。',
     subscription_refresh_failed:'订阅刷新失败，请检查服务商状态。',
     subscription_config_validation_failed:'订阅配置验证失败，原配置保持不变。',
-    at_least_one_subscription_required:'出口组至少需要启用一个订阅。',
+    at_least_one_subscription_required:'出口组至少需要保留一个启用的订阅。',
+    subscription_not_found:'未找到该订阅。',
     peer_exit_unknown:'其他槽位出口尚未确认，请先完成健康检查。',
     measured_candidate_required:'请先完成全量测速，再选择可用节点。',
     candidate_revalidation_failed:'候选节点复测失败或 IP 已被占用，未执行更换。',
     enabled_managed_slot_required:'请先启用该槽位并配置健康检查与出口组映射。'};
   return slotBatchText(messages[code] || code);
+}
+function fmtSubInterval(sec){
+  sec = Number(sec) || 3600;
+  if(sec % 86400 === 0 && sec >= 86400) return (sec / 86400) + ' ' + slotBatchText('天');
+  if(sec % 3600 === 0 && sec >= 3600) return (sec / 3600) + ' ' + slotBatchText('小时');
+  return Math.round(sec / 60) + ' ' + slotBatchText('分钟');
+}
+function syncProxySubscriptionInterval(){
+  const val = Math.max(1, Number(document.getElementById('proxySubscriptionIntervalVal').value) || 1);
+  const unit = Number(document.getElementById('proxySubscriptionIntervalUnit').value) || 3600;
+  document.getElementById('proxySubscriptionInterval').value = Math.max(300, Math.min(2592000, Math.round(val * unit)));
 }
 async function loadProxySubscriptions(){
   if(PROXY_SUBSCRIPTIONS_LOADING || PROXY_SUBSCRIPTION_SAVING) return;
@@ -15237,9 +15315,11 @@ async function loadProxySubscriptions(){
     document.getElementById('proxySubscriptionsList').innerHTML=PROXY_SUBSCRIPTIONS.map((s,i)=>
       '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--line)">'
       +'<b>'+esc(s.name)+'</b><span class="mono">'+esc(s.source)+'</span>'
-      +'<span>'+slotBatchText(s.enabled?'已启用':'已停用')+' · '+Number(s.nodes || 0)+' '+slotBatchText('节点')+'</span>'
+      +'<span>'+slotBatchText(s.enabled?'已启用':'已停用')+' · '+Number(s.nodes || 0)+' '+slotBatchText('节点')+' · '+slotBatchText('刷新周期: ')+fmtSubInterval(s.interval)+'</span>'
       +'<button class="sec mini" onclick="openProxySubscription('+i+')">'+slotBatchText('编辑')+'</button>'
-      +'<button class="sec mini" onclick="refreshProxySubscription('+i+',this)">'+slotBatchText('刷新订阅')+'</button></div>').join('');
+      +'<button class="sec mini" onclick="viewSubscriptionNodes('+i+')">'+slotBatchText('查看节点')+'</button>'
+      +'<button class="sec mini" onclick="refreshProxySubscription('+i+',this)">'+slotBatchText('刷新订阅')+'</button>'
+      +'<button class="danger mini" onclick="deleteProxySubscription('+i+',this)">'+slotBatchText('删除')+'</button></div>').join('');
   }catch(e){ document.getElementById('proxySubscriptionsState').textContent=proxyAdminError(e); }
   finally{PROXY_SUBSCRIPTIONS_LOADING=false;}
 }
@@ -15247,7 +15327,14 @@ function openProxySubscription(index){
   const s=PROXY_SUBSCRIPTIONS[index];
   const name=document.getElementById('proxySubscriptionName');name.value=s?s.name:'';name.disabled=!!s;
   document.getElementById('proxySubscriptionURL').value='';
-  document.getElementById('proxySubscriptionInterval').value=s?s.interval:3600;
+  const sec = s ? (Number(s.interval) || 3600) : 3600;
+  let val = 1, unit = 3600;
+  if(sec % 86400 === 0 && sec >= 86400){ val = sec / 86400; unit = 86400; }
+  else if(sec % 3600 === 0 && sec >= 3600){ val = sec / 3600; unit = 3600; }
+  else { val = Math.max(5, Math.round(sec / 60)); unit = 60; }
+  document.getElementById('proxySubscriptionIntervalVal').value = val;
+  document.getElementById('proxySubscriptionIntervalUnit').value = unit;
+  document.getElementById('proxySubscriptionInterval').value = sec;
   document.getElementById('proxySubscriptionEnabled').checked=s?s.enabled:true;
   document.getElementById('proxySubscriptionSaveState').textContent=s?s.source:'';
   document.getElementById('proxySubscriptionModal').classList.add('show');
@@ -15261,6 +15348,7 @@ function closeProxySubscription(){
 async function saveProxySubscription(btn){
   if(PROXY_SUBSCRIPTION_SAVING) return;
   PROXY_SUBSCRIPTION_SAVING=true;btn.disabled=true;
+  syncProxySubscriptionInterval();
   const state=document.getElementById('proxySubscriptionSaveState');state.textContent=slotBatchText('正在应用订阅…');
   try{
     await postJSON('/proxy/subscriptions/save',{name:document.getElementById('proxySubscriptionName').value.trim(),
@@ -15273,12 +15361,111 @@ async function saveProxySubscription(btn){
   }catch(e){state.textContent=proxyAdminError(e);}
   finally{PROXY_SUBSCRIPTION_SAVING=false;btn.disabled=false;await loadProxySubscriptions();await loadProxyHealth();}
 }
+async function deleteProxySubscription(index,btn){
+  const s=PROXY_SUBSCRIPTIONS[index];if(!s||PROXY_SUBSCRIPTION_SAVING)return;
+  if(!confirm('确定要删除订阅「'+s.name+'」吗？\n删除后该订阅的节点将从出口组中移除。此操作不可撤销。'))return;
+  PROXY_SUBSCRIPTION_SAVING=true;if(btn)btn.disabled=true;
+  try{
+    await postJSON('/proxy/subscriptions/delete',{name:s.name});
+    toast(slotBatchText('订阅已删除。'),'ok');
+  }catch(e){
+    toast(proxyAdminError(e),'bad');
+  }finally{
+    PROXY_SUBSCRIPTION_SAVING=false;if(btn)btn.disabled=false;await loadProxySubscriptions();await loadProxyHealth();
+  }
+}
 async function refreshProxySubscription(index,btn){
   const s=PROXY_SUBSCRIPTIONS[index];if(!s||PROXY_SUBSCRIPTION_SAVING)return;
   PROXY_SUBSCRIPTION_SAVING=true;btn.disabled=true;
   try{await postJSON('/proxy/subscriptions/refresh',{name:s.name});toast(slotBatchText('订阅已刷新，正在更新节点排名。'),'ok');}
   catch(e){document.getElementById('proxySubscriptionsState').textContent=proxyAdminError(e);toast(proxyAdminError(e),'bad');}
   finally{PROXY_SUBSCRIPTION_SAVING=false;btn.disabled=false;await loadProxySubscriptions();}
+}
+
+let SUB_NODES_DATA=null, SUB_NODES_NAME='';
+async function viewSubscriptionNodes(index){
+  const s=PROXY_SUBSCRIPTIONS[index];if(!s)return;
+  SUB_NODES_NAME=s.name;SUB_NODES_DATA=null;
+  document.getElementById('proxySubNodesTitle').textContent=slotBatchText('订阅节点清单: ')+s.name;
+  document.getElementById('proxySubNodesFilter').value='';
+  document.getElementById('proxySubNodesState').textContent=slotBatchText('正在加载节点清单…');
+  document.getElementById('proxySubNodesList').innerHTML='';
+  document.getElementById('proxySubNodesModal').classList.add('show');
+  document.getElementById('proxySubNodesFilter').focus();
+  await loadSubNodesData(s.name);
+}
+function closeSubNodesModal(){
+  SUB_NODES_NAME='';SUB_NODES_DATA=null;
+  document.getElementById('proxySubNodesModal').classList.remove('show');
+}
+async function loadSubNodesData(name){
+  try{
+    const data=await getJSON('/proxy/subscriptions/nodes?name='+encodeURIComponent(name));
+    if(SUB_NODES_NAME!==name)return;
+    SUB_NODES_DATA=data;renderSubNodesList();
+  }catch(e){
+    if(SUB_NODES_NAME===name)document.getElementById('proxySubNodesState').textContent=proxyAdminError(e);
+  }
+}
+async function refreshCurrentSubNodes(btn){
+  if(!SUB_NODES_NAME)return;
+  if(btn){btn.disabled=true;btn.textContent=slotBatchText('测速中…');}
+  document.getElementById('proxySubNodesState').textContent=slotBatchText('正在测试节点延迟…');
+  try{
+    await postJSON('/proxy/subscriptions/test',{name:SUB_NODES_NAME});
+    await loadSubNodesData(SUB_NODES_NAME);
+    toast(slotBatchText('已刷新节点测速。'),'ok');
+  }catch(e){
+    document.getElementById('proxySubNodesState').textContent=proxyAdminError(e);
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=slotBatchText('刷新节点测速');}
+  }
+}
+function renderSubNodesList(){
+  const data=SUB_NODES_DATA;if(!data)return;
+  const nodes=data.nodes||[];
+  const validCount=nodes.filter(n=>n.latency_ms>0).length;
+  document.getElementById('proxySubNodesState').textContent=
+    data.name+' · '+slotBatchText('共 ')+nodes.length+slotBatchText(' 个节点')
+    +(validCount?' · '+validCount+slotBatchText(' 个已测速'):'')
+    +(data.updatedAt?' · '+slotBatchText('更新于 ')+data.updatedAt.slice(0,19).replace('T',' '):'');
+  const filter=(document.getElementById('proxySubNodesFilter').value||'').trim().toLowerCase();
+  const list=nodes.filter(n=>[n.name,n.type,n.ip,n.country].join(' ').toLowerCase().includes(filter));
+  if(!list.length){
+    document.getElementById('proxySubNodesList').innerHTML='<p class="hint">'+slotBatchText('没有匹配的节点')+'</p>';
+    return;
+  }
+  document.getElementById('proxySubNodesList').innerHTML='<div class="table-wrap"><table class="data-cards"><thead><tr>'
+    +['节点名称','协议类型','出口 IP','地区','延迟'].map(t=>'<th>'+slotBatchText(t)+'</th>').join('')
+    +'</tr></thead><tbody>'
+    +list.map(n=>{
+      let latHtml='<span style="color:var(--dim)">'+slotBatchText('未测速')+'</span>';
+      if(n.latency_ms>0){
+        const tone=n.latency_ms<=300?'ok':(n.latency_ms<=800?'warn':'bad');
+        latHtml='<span class="slot-latency slot-latency-'+tone+'">'+n.latency_ms+' ms</span>';
+      }
+      return '<tr>'
+        +'<td>'+esc(n.name)+'</td>'
+        +'<td>'+esc(n.type||'—')+'</td>'
+        +'<td class="mono">'+esc(n.ip||'—')+'</td>'
+        +'<td>'+esc(n.country||'—')+'</td>'
+        +'<td>'+latHtml+'</td>'
+        +'</tr>';
+    }).join('')
+    +'</tbody></table></div>';
+}
+async function cancelHealthScan(btn){
+  if(btn) btn.disabled=true;
+  try{
+    await postJSON('/proxy/health/cancel-scan',{});
+    toast(slotBatchText('已中止测速'),'ok');
+    await loadProxyHealth();
+    if(PROXY_NODE_SLOT) await refreshProxyNodeChoices();
+  }catch(e){
+    toast(proxyAdminError(e),'bad');
+  }finally{
+    if(btn) btn.disabled=false;
+  }
 }
 async function openProxyNodeModal(index){
   if(SLOTS_DIRTY || SLOT_BATCH_RUNNING){toast(slotBatchText('请先保存槽位并等待端口测试结束。'),'warn');return;}
@@ -15305,8 +15492,11 @@ async function refreshProxyNodeChoices(){
 }
 function renderProxyNodeChoices(){
   const data=PROXY_NODE_DATA;if(!data)return;
-  document.getElementById('proxyNodeState').textContent=PROXY_NODE_SLOT+' · '+data.current+' · '
-    +slotBatchText(data.manual?'手动保留':'自动选择')+(data.scanning?' · '+slotBatchText('全量测速中，请等待完成后更换。'):'');
+  const scanHint = data.scanning
+    ? (' · ' + slotBatchText('全量测速中') + ' <button class="sec mini" onclick="cancelHealthScan(this)">' + slotBatchText('中止测速') + '</button>')
+    : '';
+  document.getElementById('proxyNodeState').innerHTML=esc(PROXY_NODE_SLOT+' · '+data.current+' · ')
+    +esc(slotBatchText(data.manual?'手动保留':'自动选择'))+scanHint;
   const filter=document.getElementById('proxyNodeFilter').value.trim().toLowerCase();
   const rows=(data.nodes || []).map((n,i)=>({n,i})).filter(({n})=>[n.node,n.ip,n.country,n.country_code].join(' ').toLowerCase().includes(filter));
   document.getElementById('proxyNodeChoices').innerHTML=rows.length?'<div class="table-wrap"><table class="data-cards"><thead><tr>'
@@ -15314,7 +15504,7 @@ function renderProxyNodeChoices(){
     +rows.map(({n,i})=>'<tr><td>'+esc(n.node)+'<br><small>'+esc(n.country || n.country_code || '')+'</small></td><td class="mono">'+esc(n.ip)+'</td>'
       +'<td><span class="slot-latency slot-latency-'+(n.latency_ms<=300?'ok':n.latency_ms<=800?'warn':'bad')+'">'+Number(n.latency_ms)+' ms</span></td>'
       +'<td>'+esc(ipTypeLabel(n.ip_type) || slotBatchText('未知'))+'</td><td>'
-      +(n.selectable?'<button class="sec mini" onclick="chooseProxyNode('+i+',this)"'+(data.scanning||PROXY_NODE_BUSY?' disabled':'')+'>'+slotBatchText('更换')+'</button>'
+      +(n.selectable?'<button class="sec mini" onclick="chooseProxyNode('+i+',this)"'+(PROXY_NODE_BUSY?' disabled':'')+'>'+slotBatchText('更换')+'</button>'
         :esc(slotBatchText(n.unavailable_reason==='exit_occupied'?'已被其他槽位占用':'国家限制')))
       +'</td></tr>').join('')+'</tbody></table></div>':'<p class="hint">'+slotBatchText('暂无匹配节点，请先完成全量测速。')+'</p>';
 }

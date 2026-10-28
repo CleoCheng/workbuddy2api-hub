@@ -575,6 +575,33 @@ class SubscriptionTests(unittest.TestCase):
         self.assertNotIn('path-private-token', json.dumps(result))
         self.mon.trigger.assert_called_once_with(rescan=True)
 
+    def test_delete_subscription_removes_from_groups_and_reloads(self):
+        P.change(self.mon, dict(name='c',url='https://three.example/sub?token=new',enabled=True,interval=1800))
+        result = P.delete(self.mon, dict(name='c'))
+        self.assertEqual(len(result['providers']), 2)
+        saved = json.loads(self.path.read_text())
+        self.assertNotIn('c', saved['proxy-providers'])
+        self.assertTrue(all('c' not in g['use'] for g in saved['proxy-groups']))
+
+    def test_delete_last_subscription_fails(self):
+        P.delete(self.mon, dict(name='a'))
+        with self.assertRaisesRegex(ValueError, 'at_least_one_subscription_required'):
+            P.delete(self.mon, dict(name='b'))
+
+    def test_nodes_lists_subscription_proxies_with_latency(self):
+        self.mon.ranking = {'ranked': [{'node': 'a-node', 'latency_ms': 123, 'ip': '1.2.3.4'}]}
+        data = P.nodes(self.mon, 'a')
+        self.assertEqual(data['name'], 'a')
+        self.assertEqual(data['count'], 1)
+        self.assertEqual(data['nodes'][0]['name'], 'a-node')
+        self.assertEqual(data['nodes'][0]['latency_ms'], 123)
+        self.assertEqual(data['nodes'][0]['ip'], '1.2.3.4')
+
+    def test_scanning_interrupted_by_cancel_scan(self):
+        self.mon.ranking['scanning'] = True
+        self.mon.cancel_scan()
+        self.assertTrue(self.mon.scan_cancel.is_set())
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -244,6 +244,7 @@ class Monitor:
         self.run_lock = threading.Lock()
         self.wake = threading.Event()
         self.stop_event = threading.Event()
+        self.scan_cancel = threading.Event()
         self.thread = None
         self.rows = {}
         self.history = []
@@ -276,9 +277,15 @@ class Monitor:
     def stop(self):
         self.stop_event.set()
         self.wake.set()
+        self.scan_cancel.set()
+
+    def cancel_scan(self):
+        self.scan_cancel.set()
 
     def configure(self, raw):
-        if not self.run_lock.acquire(blocking=False):
+        if self.ranking.get('scanning'):
+            self.cancel_scan()
+        if not self.run_lock.acquire(timeout=0.5):
             raise ValueError('health check is running; retry configuration after it finishes')
         try:
             self._configure(raw)
@@ -379,7 +386,9 @@ class Monitor:
                     tested_at=ranking.get('completed_at', 0), enabled=cfg['enabled'])
 
     def manual_switch(self, sid, node=None, automatic=False):
-        if not self.run_lock.acquire(blocking=False):
+        if self.ranking.get('scanning'):
+            self.cancel_scan()
+        if not self.run_lock.acquire(timeout=0.5):
             raise ValueError('health_check_busy')
         try:
             cfg = copy.deepcopy(self.cfg)
@@ -610,7 +619,7 @@ class Monitor:
             self._persist()
         try:
             for node in nodes:
-                if self.stop_event.is_set() or self.cfg != cfg:
+                if self.stop_event.is_set() or self.cfg != cfg or self.scan_cancel.is_set():
                     raise ValueError('scan_interrupted')
                 try:
                     probe = self._candidate_probe(cfg, node)
@@ -631,6 +640,7 @@ class Monitor:
                 self.ranking.update(ranked=ranked, completed_at=time.time())
             return ranked
         finally:
+            self.scan_cancel.clear()
             with self.lock:
                 self.ranking['scanning'] = False
                 self._persist()
@@ -922,8 +932,9 @@ def manager(hub):
 def route(hub, handler, method):
     path = handler.path.split('?')[0]
     if path not in ('/proxy/health', '/proxy/health/config', '/proxy/health/check',
-                    '/proxy/health/nodes', '/proxy/health/switch',
-                    '/proxy/subscriptions', '/proxy/subscriptions/save', '/proxy/subscriptions/refresh'):
+                    '/proxy/health/nodes', '/proxy/health/switch', '/proxy/health/cancel-scan',
+                    '/proxy/subscriptions', '/proxy/subscriptions/save', '/proxy/subscriptions/refresh',
+                    '/proxy/subscriptions/delete', '/proxy/subscriptions/nodes', '/proxy/subscriptions/test'):
         return False
     if not handler._panel_ok():
         handler._error(401, 'panel password required')
@@ -938,6 +949,10 @@ def route(hub, handler, method):
         elif method == 'GET' and path == '/proxy/subscriptions':
             import wb_proxy_subscriptions
             handler._json(200, wb_proxy_subscriptions.view(mon))
+        elif method == 'GET' and path == '/proxy/subscriptions/nodes':
+            import wb_proxy_subscriptions
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(handler.path).query)
+            handler._json(200, wb_proxy_subscriptions.nodes(mon, query.get('name', [''])[0]))
         elif method == 'POST':
             payload = handler._payload_or_error()
             if payload is None:
@@ -946,9 +961,23 @@ def route(hub, handler, method):
                 mon.configure(payload)
             elif path == '/proxy/health/check':
                 mon.trigger(rescan=payload.get('rescan') is True)
+            elif path == '/proxy/health/cancel-scan':
+                mon.cancel_scan()
+                handler._json(200, dict(ok=True, cancelled=True))
+                return True
             elif path == '/proxy/health/switch':
                 result = mon.manual_switch(str(payload.get('id', '')), str(payload.get('node', '')),
                                            automatic=payload.get('automatic') is True)
+                handler._json(200, result)
+                return True
+            elif path == '/proxy/subscriptions/delete':
+                import wb_proxy_subscriptions
+                result = wb_proxy_subscriptions.delete(mon, payload)
+                handler._json(200, result)
+                return True
+            elif path == '/proxy/subscriptions/test':
+                import wb_proxy_subscriptions
+                result = wb_proxy_subscriptions.test_nodes(mon, str(payload.get('name', '')))
                 handler._json(200, result)
                 return True
             elif path in ('/proxy/subscriptions/save', '/proxy/subscriptions/refresh'):
