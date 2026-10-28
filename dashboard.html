@@ -1495,6 +1495,66 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
   var ATTRS = ['title', 'placeholder', 'aria-label', 'data-label', 'alt'];
   var SKIP = {SCRIPT: 1, STYLE: 1, TEXTAREA: 1, NOSCRIPT: 1};
   var DICT = {
+    "Qoder 控制台": "Qoder console",
+    "Qoder 账号管理": "Qoder accounts",
+    "Qoder 任务与福利": "Qoder tasks and rewards",
+    "添加 Qoder 账号": "Add Qoder account",
+    "授权与平台设置": "Authorization and platform settings",
+    "通过官方授权链接登录，支持 Google。账号凭据保存在服务器，客户端继续使用统一入口。": "Sign in through the official authorization link, including Google. Credentials stay on the server; clients use the unified endpoint.",
+    "更多账号操作": "More account actions",
+    "统一调用入口": "Unified API endpoint",
+    "管理 API Key": "Manage API keys",
+    "Key 必须允许 Qoder 和账号所在区域。页面切换不会改变客户端的调度权限。": "The key must allow Qoder and the account region. Changing pages does not change client routing permissions.",
+    "可用模型目录": "Available model catalog",
+    "加载模型目录": "Load model catalog",
+    "签到结果以实际到账为准": "Rewards reflect actual credits received",
+    "检查活动只领取当前可用奖励。没有可领取活动时显示零新增积分；桌面端专属任务仍需在官方客户端完成。": "Claim only currently available rewards. No claimable activity means zero new credits; desktop-only tasks still require the official app.",
+    "账号与出口": "Accounts and proxy exits",
+    "搜索昵称、账号或出口": "Search name, account or exit",
+    "搜索 Qoder 账号": "Search Qoder accounts",
+    "Qoder 账号区域": "Qoder account region",
+    "全部区域": "All regions",
+    "未绑定代理槽的账号沿用环境代理或直连。只有明确绑定且可用的代理槽才会作为账号出口。": "Unbound accounts use an environment proxy or a direct connection. Only an explicitly bound, available slot routes the account.",
+    "部分状态加载失败，请刷新重试。": "Some status requests failed. Refresh to retry.",
+    "服务已启用": "Service enabled",
+    "服务已停用": "Service disabled",
+    "最后更新": "Last updated",
+    "待确认": "Unconfirmed",
+    "未绑定代理": "No proxy binding",
+    "环境代理或直连": "Environment proxy or direct",
+    "代理槽不可用": "Proxy slot unavailable",
+    "出口待探测": "Exit not yet checked",
+    "账号总数": "Total accounts",
+    "可调度账号": "Ready accounts",
+    "已绑定代理": "Proxy-bound accounts",
+    "需要关注": "Needs attention",
+    "自动排程已启用": "Schedule enabled",
+    "自动排程已停用": "Schedule disabled",
+    "签到时段": "Check-in times",
+    "上次执行": "Last run",
+    "可调度": "Ready",
+    "暂不可调度": "Temporarily unavailable",
+    "积分余额": "Credit balance",
+    "凭证有效期": "Credential validity",
+    "最近签到": "Last check-in",
+    "尚无领取记录": "No reward claim recorded",
+    "可用免费模型": "Available free models",
+    "账号出口": "Account proxy exit",
+    "检查并领取活动": "Check and claim rewards",
+    "测试模型": "Test model",
+    "刷新余额": "Refresh balance",
+    "没有匹配的账号": "No matching accounts",
+    "暂无 Qoder 账号，请通过官方授权添加": "No Qoder accounts. Add one through official authorization.",
+    "正在执行，请稍候…": "Working, please wait…",
+    "测试通过": "Test passed",
+    "测试失败": "Test failed",
+    "实际新增积分": "Credits actually received",
+    "无新增积分": "No new credits",
+    "领取未完成": "Claim incomplete",
+    "没有可领取活动": "No claimable activity",
+    "操作已完成": "Action completed",
+    "代理绑定已保存": "Proxy binding saved",
+    "暂无可用模型": "No available models",
     "代理健康检查与自动切换": "Proxy health checks and failover",
     "仅在确认出口故障后切换；按实际 IP 去重，备用不足时暂停该槽位，账号绑定保持不变。": "Switch only after confirming an exit failure; deduplicate actual IPs and pause slots without a spare. Account bindings stay fixed.",
     "启用代理健康检查": "Enable proxy health checks",
@@ -2857,6 +2917,66 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     '猫猫正在旅行途中，请稍后再来查看！': 'The cat is still travelling; check again later!'
   };
   var HANT_PHRASES = {
+    "Qoder 控制台": "Qoder 控制台",
+    "Qoder 账号管理": "Qoder 帳號管理",
+    "Qoder 任务与福利": "Qoder 任務與福利",
+    "添加 Qoder 账号": "新增 Qoder 帳號",
+    "授权与平台设置": "授權與平台設定",
+    "通过官方授权链接登录，支持 Google。账号凭据保存在服务器，客户端继续使用统一入口。": "透過官方授權連結登入，支援 Google。帳號憑證儲存在伺服器，用戶端繼續使用統一入口。",
+    "更多账号操作": "更多帳號操作",
+    "统一调用入口": "統一呼叫入口",
+    "管理 API Key": "管理 API Key",
+    "Key 必须允许 Qoder 和账号所在区域。页面切换不会改变客户端的调度权限。": "Key 必須允許 Qoder 和帳號所在區域。頁面切換不會改變用戶端的調度權限。",
+    "可用模型目录": "可用模型目錄",
+    "加载模型目录": "載入模型目錄",
+    "签到结果以实际到账为准": "簽到結果以實際入帳為準",
+    "检查活动只领取当前可用奖励。没有可领取活动时显示零新增积分；桌面端专属任务仍需在官方客户端完成。": "檢查活動只領取目前可用獎勵。沒有可領取活動時顯示零新增積分；桌面端專屬任務仍需在官方用戶端完成。",
+    "账号与出口": "帳號與出口",
+    "搜索昵称、账号或出口": "搜尋暱稱、帳號或出口",
+    "搜索 Qoder 账号": "搜尋 Qoder 帳號",
+    "Qoder 账号区域": "Qoder 帳號區域",
+    "全部区域": "全部區域",
+    "未绑定代理槽的账号沿用环境代理或直连。只有明确绑定且可用的代理槽才会作为账号出口。": "未繫結代理槽的帳號沿用環境代理或直接連線。只有明確繫結且可用的代理槽才會作為帳號出口。",
+    "部分状态加载失败，请刷新重试。": "部分狀態載入失敗，請重新整理後重試。",
+    "服务已启用": "服務已啟用",
+    "服务已停用": "服務已停用",
+    "最后更新": "最後更新",
+    "待确认": "待確認",
+    "未绑定代理": "未繫結代理",
+    "环境代理或直连": "環境代理或直接連線",
+    "代理槽不可用": "代理槽不可用",
+    "出口待探测": "出口待探測",
+    "账号总数": "帳號總數",
+    "可调度账号": "可調度帳號",
+    "已绑定代理": "已繫結代理",
+    "需要关注": "需要關注",
+    "自动排程已启用": "自動排程已啟用",
+    "自动排程已停用": "自動排程已停用",
+    "签到时段": "簽到時段",
+    "上次执行": "上次執行",
+    "可调度": "可調度",
+    "暂不可调度": "暫不可調度",
+    "积分余额": "積分餘額",
+    "凭证有效期": "憑證有效期",
+    "最近签到": "最近簽到",
+    "尚无领取记录": "尚無領取紀錄",
+    "可用免费模型": "可用免費模型",
+    "账号出口": "帳號出口",
+    "检查并领取活动": "檢查並領取活動",
+    "测试模型": "測試模型",
+    "刷新余额": "重新整理餘額",
+    "没有匹配的账号": "沒有符合的帳號",
+    "暂无 Qoder 账号，请通过官方授权添加": "暫無 Qoder 帳號，請透過官方授權新增",
+    "正在执行，请稍候…": "正在執行，請稍候…",
+    "测试通过": "測試通過",
+    "测试失败": "測試失敗",
+    "实际新增积分": "實際新增積分",
+    "无新增积分": "無新增積分",
+    "领取未完成": "領取未完成",
+    "没有可领取活动": "沒有可領取活動",
+    "操作已完成": "操作已完成",
+    "代理绑定已保存": "代理繫結已儲存",
+    "暂无可用模型": "暫無可用模型",
     "代理健康检查与自动切换": "代理健康檢查與自動切換",
     "仅在确认出口故障后切换；按实际 IP 去重，备用不足时暂停该槽位，账号绑定保持不变。": "僅在確認出口故障後切換；按實際 IP 去重，備用不足時暫停該槽位，帳號繫結保持不變。",
     "启用代理健康检查": "啟用代理健康檢查",
@@ -4795,20 +4915,59 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
 
 
   <div id="pagePlatforms" class="main-page">
-    <section id="qoderPlatformControls">
-      <h2>平台管理</h2>
-      <p>客户端共用一个入口；在 API Key 中选择允许的平台，新会话按可用账号加权随机调度，同一会话优先保持原平台。</p>
-      <button onclick="configureQoder(true)">启用 Qoder</button>
-      <button class="sec" onclick="configureQoder(false)">停用 Qoder</button>
-      <button class="sec" onclick="loadPlatforms()">刷新平台状态</button>
-      <button class="sec" onclick="openQoderPanel()">打开 Qoder 账号管理</button>
-      <button class="sec" onclick="startQoderLogin()">Qoder 国际版授权（支持 Google）</button>
-      <p id="qoderLoginStatus" role="status"></p>
-      <a id="qoderLoginLink" target="_blank" rel="noopener noreferrer" style="display:none;overflow-wrap:anywhere">打开 Qoder 官方授权链接</a>
-      <p id="platformStatus" role="status"></p>
-      <div id="qoderAccountBindings"></div>
-      <p>Qoder 账号可绑定现有代理槽；不同平台的账号与积分分别保存。</p>
-    </section>
+    <style>
+      #qoderWorkspace{max-width:1500px;margin:auto}
+      #pagePlatforms .qd-head,#pagePlatforms .qd-tools{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+      #pagePlatforms .qd-head{margin:8px 0 22px}#pagePlatforms .qd-head h2{margin:4px 0 8px;font-size:26px}
+      #pagePlatforms .qd-muted{color:var(--dim);font-size:12px;line-height:1.7}
+      #pagePlatforms .qd-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}
+      #pagePlatforms .qd-kpi{padding:18px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+      #pagePlatforms .qd-kpi strong{display:block;font-size:28px;line-height:1.5;font-weight:600}
+      #pagePlatforms .qd-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px;margin-top:18px}
+      #pagePlatforms .qd-card{padding:20px;background:var(--panel);border:1px solid var(--line);border-radius:14px;min-width:0}
+      #pagePlatforms .qd-card h3{margin:0;font-size:17px;overflow-wrap:anywhere}
+      #pagePlatforms .qd-state{padding:4px 9px;border:1px solid var(--line);border-radius:20px;font-size:11px;white-space:nowrap}
+      #pagePlatforms .qd-state.ok{color:var(--accent2)}#pagePlatforms .qd-state.warn{color:var(--accent)}
+      #pagePlatforms .qd-facts{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:20px 0}
+      #pagePlatforms .qd-facts dt{font-size:11px;color:var(--dim);margin-bottom:5px}#pagePlatforms .qd-facts dd{margin:0;font-size:14px;overflow-wrap:anywhere}
+      #pagePlatforms .qd-route{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:14px}
+      #pagePlatforms .qd-route select{max-width:100%;width:100%;margin-top:8px}
+      #pagePlatforms .qd-result{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.7;margin-top:12px;padding:12px;border-left:2px solid var(--accent);background:var(--panel2)}
+      #pagePlatforms .qd-result:empty{display:none}#pagePlatforms .qd-empty{grid-column:1/-1;text-align:center;padding:38px;border:1px dashed var(--line);border-radius:12px;color:var(--dim)}
+      #pagePlatforms .qd-notice{margin:16px 0;padding:14px 16px;border:1px solid var(--line);border-radius:10px;line-height:1.8;font-size:13px}
+      #pagePlatforms .qd-search{min-width:200px;flex:1}#pagePlatforms .qd-actions{display:flex;gap:8px;flex-wrap:wrap}
+      #pagePlatforms .qd-models{display:flex;gap:8px;flex-wrap:wrap;margin-top:15px}#pagePlatforms .qd-model{border:1px solid var(--line);padding:6px 10px;border-radius:6px;font-size:12px;overflow-wrap:anywhere}
+      #pagePlatforms .qd-data{font-family:var(--mono,monospace);font-size:11px;overflow-wrap:anywhere}
+      #qoderPlatformControls{margin-bottom:18px}#qoderPlatformControls details{padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+      #qoderPlatformControls summary{cursor:pointer}#qoderWorkspace [hidden]{display:none!important}
+      @media(max-width:700px){#pagePlatforms .qd-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}#pagePlatforms .qd-grid{grid-template-columns:1fr}#pagePlatforms .qd-head h2{font-size:22px}}
+    </style>
+    <div id="qoderWorkspace">
+      <div class="qd-head">
+        <div><div class="qd-muted">QODER / WORKSPACE</div><h2 id="qdTitle">Qoder 控制台</h2><div class="qd-muted" id="platformStatus" role="status">正在加载…</div></div>
+        <div class="qd-actions"><button class="sec" onclick="loadPlatforms()">刷新平台状态</button><button onclick="qdRevealLogin()">添加 Qoder 账号</button></div>
+      </div>
+      <div id="qdError" class="qd-notice" role="alert" hidden></div>
+      <section id="qoderPlatformControls">
+        <details id="qdConnection"><summary>授权与平台设置</summary>
+          <p class="qd-muted">通过官方授权链接登录，支持 Google。账号凭据保存在服务器，客户端继续使用统一入口。</p>
+          <div class="qd-actions"><button onclick="startQoderLogin()">Qoder 国际版授权（支持 Google）</button><button class="sec" onclick="configureQoder(true)">启用 Qoder</button><button class="sec" onclick="configureQoder(false)">停用 Qoder</button></div>
+          <p id="qoderLoginStatus" role="status"></p>
+          <a id="qoderLoginLink" target="_blank" rel="noopener noreferrer" style="display:none;overflow-wrap:anywhere">打开 Qoder 官方授权链接</a>
+          <p class="qd-muted">客户端共用一个入口；在 API Key 中选择允许的平台，新会话按可用账号加权随机调度，同一会话优先保持原平台。</p>
+          <button class="sec" onclick="qdShowLegacy('accounts')">更多账号操作</button>
+        </details>
+      </section>
+      <div id="qdNative">
+        <div id="qdKpis" class="qd-kpis"></div>
+        <div id="qdGateway" hidden><section class="qd-card"><div class="qd-tools"><h3>统一调用入口</h3><button class="sec" onclick="switchMainTab('settings')">管理 API Key</button></div><p class="qd-data" id="qdEndpoint" data-no-i18n></p><p class="qd-muted">Key 必须允许 Qoder 和账号所在区域。页面切换不会改变客户端的调度权限。</p><div class="qd-tools"><h3>可用模型目录</h3><button class="sec" onclick="qdLoadModels()">加载模型目录</button></div><div id="qdModels" class="qd-models" role="status"></div></section></div>
+        <div id="qdTaskNotice" class="qd-notice" hidden><strong>签到结果以实际到账为准</strong><div>检查活动只领取当前可用奖励。没有可领取活动时显示零新增积分；桌面端专属任务仍需在官方客户端完成。</div><p id="qdSchedule" class="qd-muted"></p></div>
+        <div class="qd-tools" style="margin-top:22px"><h3 id="qdListTitle">账号与出口</h3><div class="qd-actions"><input id="qdSearch" class="qd-search" placeholder="搜索昵称、账号或出口" aria-label="搜索 Qoder 账号" oninput="qdRenderAccounts()"><select id="qdFilter" aria-label="Qoder 账号区域" onchange="qdRenderAccounts()"><option value="all">全部区域</option><option value="intl">国际版</option><option value="cn">国内版</option></select></div></div>
+        <p class="qd-muted">未绑定代理槽的账号沿用环境代理或直连。只有明确绑定且可用的代理槽才会作为账号出口。</p>
+        <div id="qoderAccountBindings" class="qd-grid" aria-live="polite"></div>
+        <p id="qdUpdated" class="qd-muted"></p>
+      </div>
+    </div>
     <p id="qoderViewStatus" role="status"></p>
     <iframe id="qoderFrame" title="Qoder" style="display:none;width:100%;height:82vh;border:1px solid var(--line);border-radius:12px;background:var(--panel)"></iframe>
   </div>
@@ -14859,7 +15018,9 @@ function switchMainTab(tab){
   }
   currentMainTab = tab;
   syncGatewayPlatform();
-  if(tab === 'platforms') loadPlatforms();
+  if(tab === 'platforms'){
+    if(typeof qdSetView === 'function') qdSetView('gateway'); else loadPlatforms();
+  }
   const qoderView = isQoderView(tab);
   const pageTab = qoderView ? 'platforms' : tab;
   const platformPage = document.getElementById('pagePlatforms');
@@ -18392,22 +18553,146 @@ async function configureQoder(enabled){
   } catch(e){ toast(e.message, 'bad'); }
 }
 async function loadPlatforms(){
+  if(qdLoading) return qdLoading;
+  const generation = qdWorkspaceGeneration;
+  const job=qdRefresh(generation);qdLoading=job;
+  try { await job; } finally { if(qdLoading===job) qdLoading=null; }
+}
+let qdLoading = null, qdTimer = null, qdWorkspaceGeneration = 0, qdTab = 'gateway';
+let qdState = {accounts:[],slots:[],health:{},enabled:false}, qdResults = new Map(), qdBusy = new Set(), qdTestModels=new Map();
+const qdAPI = '/platforms/qoder/api';
+function qdText(text){
+  const i=typeof window!=='undefined' && window.WB_I18N;
+  return !i||i.current()==='zh'?text:i.current()==='zh-Hant'?i.translateHant(text):i.translate(text);
+}
+function qdRevealLogin(){ document.getElementById('qdConnection').open=true; }
+function stopQoderWorkspace(){
+  qdWorkspaceGeneration++;
+  qdLoading=null;
+  if(qdTimer) clearTimeout(qdTimer);
+  qdTimer=null;
+}
+function qdSetView(tab){
+  qdTab=tab;
+  document.getElementById('qdNative').hidden=false;
+  document.getElementById('qoderFrame').style.display='none';
+  document.getElementById('qoderPlatformControls').hidden=false;
+  document.getElementById('qoderViewStatus').textContent='';
+  document.getElementById('qdTitle').textContent=tab==='tasks'?'Qoder 任务与福利':tab==='accounts'?'Qoder 账号管理':'Qoder 控制台';
+  document.getElementById('qdGateway').hidden=tab!=='gateway';
+  document.getElementById('qdTaskNotice').hidden=tab!=='tasks';
+  document.getElementById('qdEndpoint').textContent=window.location.origin+'/v1';
+  if(qdTimer) clearTimeout(qdTimer);
+  loadPlatforms();
+}
+async function qdRefresh(generation){
+  const error=document.getElementById('qdError');
   try {
     const data = await getJSON('/platforms/status');
-    document.getElementById('platformStatus').textContent = 'Qoder: ' + (data.qoder_enabled ? 'ON' : 'OFF') + ' · ' + data.accounts.filter(a => a.ready).length + '/' + data.accounts.length;
-    const box = document.getElementById('qoderAccountBindings');
-    box.replaceChildren();
-    data.accounts.forEach(a => {
-      const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:12px;align-items:center;margin:12px 0;flex-wrap:wrap';
-      const label = document.createElement('span'); label.textContent = 'Qoder · ' + (a.nickname || a.uid) + ' · ' + a.realm;
-      const select = document.createElement('select');
-      const direct = document.createElement('option'); direct.value = ''; direct.textContent = 'DIRECT'; select.appendChild(direct);
-      data.slots.filter(s => s.enabled).forEach(s => { const o=document.createElement('option'); o.value=s.id; o.textContent=s.name || s.id; select.appendChild(o); });
-      select.value = a.proxy_slot;
-      select.onchange = async () => { try { await postJSON('/platforms/qoder/bind',{uid:a.uid,proxy_slot:select.value}); } catch(e){ toast(e.message,'bad'); await loadPlatforms(); } };
-      row.append(label,select); box.appendChild(row);
-    });
-  } catch(e){ document.getElementById('platformStatus').textContent=e.message; }
+    const requests=data.qoder_enabled ? [getJSON(qdAPI+'/accounts?realm=intl'),getJSON(qdAPI+'/accounts?realm=cn'),getJSON('/proxy/health'),getJSON(qdAPI+'/scheduler')] : [];
+    const detail=await Promise.allSettled(requests);
+    if(generation!==qdWorkspaceGeneration) return;
+    const accountMap=new Map((data.accounts||[]).map(a=>[a.uid,a]));
+    for(const r of detail.slice(0,2)) if(r.status==='fulfilled') for(const a of r.value.accounts||[]) accountMap.set(a.uid,{...accountMap.get(a.uid),...a});
+    qdState={enabled:!!data.qoder_enabled,accounts:[...accountMap.values()],slots:data.slots||[],health:detail[2]?.status==='fulfilled'?detail[2].value.slots||{}:{},scheduler:detail[3]?.status==='fulfilled'?detail[3].value:null};
+    const failed=detail.filter(r=>r.status==='rejected');
+    error.hidden=!failed.length;
+    error.textContent=failed.length?qdText('部分状态加载失败，请刷新重试。')+' '+failed[0].reason.message:'';
+    document.getElementById('platformStatus').textContent=qdText(qdState.enabled?'服务已启用':'服务已停用');
+    qdRenderSummary(); qdRenderAccounts();
+    document.getElementById('qdUpdated').textContent=qdText('最后更新')+' · '+new Date().toLocaleTimeString();
+  } catch(e){
+    if(generation!==qdWorkspaceGeneration) return;
+    error.hidden=false;error.textContent=e.message;
+  } finally {
+    if(generation===qdWorkspaceGeneration && typeof isQoderView==='function' && isQoderView(currentMainTab) && ['gateway','accounts','tasks'].includes(qdTab)){
+      if(qdTimer) clearTimeout(qdTimer);
+      qdTimer=setTimeout(()=>{qdTimer=null;loadPlatforms();},20000);
+    }
+  }
+}
+function qdCredit(a){
+  const c=a.credits;
+  if(!c || a.creditsDegraded) return qdText('待确认');
+  const value=c.remain ?? c.remaining ?? c.balance;
+  return typeof value==='number' && Number.isFinite(value) ? value.toLocaleString() : qdText('待确认');
+}
+function qdRoute(a){
+  const slot=qdState.slots.find(s=>s.id===a.proxy_slot), health=qdState.health[a.proxy_slot];
+  if(!a.proxy_slot) return {title:qdText('未绑定代理'),detail:qdText('环境代理或直连'),ok:false};
+  if(!slot || !slot.enabled) return {title:qdText('代理槽不可用'),detail:a.proxy_slot,ok:false};
+  return {title:slot.name||slot.id,detail:[health?.ip||slot.ip||qdText('出口待探测'),health?.node].filter(Boolean).join(' · '),ok:health?.status==='healthy'};
+}
+function qdRenderSummary(){
+  const a=qdState.accounts;
+  const values=[['账号总数',a.length],['可调度账号',a.filter(x=>x.ready).length],['已绑定代理',a.filter(x=>x.proxy_slot).length],['需要关注',a.filter(x=>x.enabled && (!x.ready || !qdRoute(x).ok)).length]];
+  document.getElementById('qdKpis').innerHTML=values.map(([label,value])=>'<div class="qd-kpi"><span class="qd-muted">'+esc(qdText(label))+'</span><strong>'+value+'</strong></div>').join('');
+  const s=qdState.scheduler;
+  document.getElementById('qdSchedule').textContent=s ? qdText(s.enabled?'自动排程已启用':'自动排程已停用')+' · '+qdText('签到时段')+': '+(s.checkin_times||'—')+' · '+qdText('上次执行')+': '+(s.last_run_time||'—') : '';
+}
+function qdRenderAccounts(){
+  const query=document.getElementById('qdSearch').value.trim().toLowerCase(), region=document.getElementById('qdFilter').value;
+  const list=qdState.accounts.filter(a=>(region==='all'||a.realm===region) && [a.nickname,a.uid,a.note,a.proxy_slot,qdRoute(a).detail].join(' ').toLowerCase().includes(query));
+  const box=document.getElementById('qoderAccountBindings');
+  // Polling must not steal focus while editing a model or choosing an exit.
+  if(box.contains(document.activeElement) && ['SELECT','INPUT'].includes(document.activeElement.tagName)) return;
+  box.querySelectorAll('[data-model-for]').forEach(input=>qdTestModels.set(input.dataset.modelFor,input.value));
+  box.innerHTML=list.map(a=>{
+    const route=qdRoute(a),busy=qdBusy.has(a.uid),dis=busy?' disabled':'', tasks=qdTab==='tasks';
+    let state=!a.enabled?'已停用':a.ready?'可调度':'暂不可调度';
+    const options=[['','未绑定代理'],...qdState.slots.filter(s=>s.enabled||s.id===a.proxy_slot).map(s=>[s.id,[s.name||s.id,s.country||s.country_code,qdState.health[s.id]?.ip||s.ip].filter(Boolean).join(' · ')])];
+    if(a.proxy_slot&&!qdState.slots.some(s=>s.id===a.proxy_slot)) options.push([a.proxy_slot,qdText('代理槽不可用')+' · '+a.proxy_slot]);
+    const button=(action,label)=>'<button class="sec mini" data-uid="'+esc(a.uid)+'" onclick="qdAction(this,\''+action+'\')"'+dis+'>'+esc(qdText(label))+'</button>';
+    return '<article class="qd-card"><div class="qd-tools"><h3 data-no-i18n>'+esc(a.nickname||a.uid.slice(0,8))+'</h3><span class="qd-state '+(a.ready?'ok':'warn')+'">'+esc(qdText(state))+'</span></div>'
+      +'<div class="qd-muted">'+esc(qdText(a.realm==='intl'?'国际版':'国内版'))+' · '+esc(a.plan||'—')+' · <span data-no-i18n>'+esc(a.uid.slice(0,8))+'</span></div>'
+      +'<dl class="qd-facts"><div><dt>'+esc(qdText('积分余额'))+'</dt><dd>'+esc(qdCredit(a))+'</dd></div><div><dt>'+esc(qdText('凭证有效期'))+'</dt><dd>'+esc(a.expiresIn||'—')+'</dd></div><div><dt>'+esc(qdText('最近签到'))+'</dt><dd>'+esc(a.lastCheckinDate||qdText('尚无领取记录'))+'</dd></div><div><dt>'+esc(qdText('可用免费模型'))+'</dt><dd>'+esc(String(a.freeModelCount??'—'))+'</dd></div></dl>'
+      +'<div class="qd-route"><div class="qd-tools"><span class="qd-muted">'+esc(qdText('账号出口'))+'</span><span class="qd-state '+(route.ok?'ok':'warn')+'">'+esc(route.title)+'</span></div><div class="qd-data" data-no-i18n>'+esc(route.detail)+'</div>'
+      +(tasks?'':'<select aria-label="'+esc(qdText('账号出口'))+'" data-uid="'+esc(a.uid)+'" onchange="qdBind(this)"'+dis+'>'+options.map(([id,label])=>'<option value="'+esc(id)+'"'+(id===(a.proxy_slot||'')?' selected':'')+'>'+esc(qdText(label))+'</option>').join('')+'</select>')+'</div>'
+      +(tasks?'<div class="qd-actions">'+button('checkin','检查并领取活动')+'</div>':'<label class="qd-muted">'+esc(qdText('测试模型'))+' <input data-model-for="'+esc(a.uid)+'" placeholder="auto" value="'+esc(qdTestModels.get(a.uid)??(a.realm==='intl'?'DeepSeek-Flash':'auto'))+'" style="width:180px"'+dis+'></label><div class="qd-actions" style="margin-top:12px">'+button('test','测试模型')+button('refresh','刷新凭证')+button('credits','刷新余额')+button('toggle',a.enabled?'停用':'启用')+'</div>')
+      +(a.lastError?'<div class="qd-result">'+esc(a.lastError)+'</div>':'')
+      +'<div class="qd-result" role="status" data-no-i18n>'+esc(qdResults.get(a.uid)||'')+'</div></article>';
+  }).join('') || '<div class="qd-empty">'+esc(qdText(qdState.accounts.length?'没有匹配的账号':'暂无 Qoder 账号，请通过官方授权添加'))+'</div>';
+}
+async function qdAction(btn,action){
+  const uid=btn.dataset.uid,a=qdState.accounts.find(x=>x.uid===uid);
+  if(!a || qdBusy.has(uid)) return;
+  const card=btn.closest('article'), input=card.querySelector('[data-model-for]'),model=input?.value.trim()||'auto';
+  qdBusy.add(uid);qdResults.set(uid,qdText('正在执行，请稍候…'));qdRenderAccounts();
+  try{
+    const routes={test:'/accounts/test',refresh:'/accounts/refresh',credits:'/accounts/credits/fetch',toggle:'/accounts/set',checkin:'/accounts/checkin'};
+    if(!routes[action]) throw new Error('Unknown action');
+    const body=action==='test'?{uid,model}:action==='toggle'?{uid,enabled:!a.enabled}:{uid};
+    const result=await postJSON(qdAPI+routes[action],body);
+    if(action==='test') qdResults.set(uid,(result.ok?qdText('测试通过'):qdText('测试失败'))+' · '+(result.model||model)+' · '+(result.elapsed_ms??'—')+'ms\n'+(result.reply||result.error||result.status||''));
+    else if(action==='checkin'){
+      const rows=result.results||[];qdResults.set(uid,rows.length?rows.map(r=>(Number(r.earned_credit)>0?qdText('实际新增积分')+' +'+Number(r.earned_credit):r.ok?qdText('无新增积分'):qdText('领取未完成'))+'\n'+(r.message||r.msg||'')+(r.next_available_note?'\n'+r.next_available_note:'')).join('\n'):qdText('没有可领取活动'));
+    }else{
+      const failed=(result.results||[]).find(r=>r.ok===false);
+      if(result.ok===false||failed) throw new Error(result.error||failed?.error||qdText('操作失败'));
+      qdResults.set(uid,qdText('操作已完成'));
+    }
+  }catch(e){ qdResults.set(uid,qdText('操作失败')+' · '+e.message); }
+  finally{ qdBusy.delete(uid);await loadPlatforms();qdRenderAccounts(); }
+}
+async function qdBind(select){
+  const uid=select.dataset.uid,a=qdState.accounts.find(x=>x.uid===uid),before=a?.proxy_slot||'';
+  if(qdBusy.has(uid)) return;
+  qdBusy.add(uid);select.disabled=true;
+  try{await postJSON('/platforms/qoder/bind',{uid,proxy_slot:select.value});qdResults.set(uid,qdText('代理绑定已保存'));}
+  catch(e){select.value=before;qdResults.set(uid,qdText('保存失败')+' · '+e.message);}
+  finally{qdBusy.delete(uid);select.disabled=false;select.blur();await loadPlatforms();qdRenderAccounts();}
+}
+async function qdLoadModels(){
+  const box=document.getElementById('qdModels');box.textContent=qdText('正在加载…');
+  const realms=[...new Set(qdState.accounts.filter(a=>a.enabled).map(a=>a.realm))];
+  try{
+    const rows=await Promise.all(realms.map(realm=>getJSON(qdAPI+'/v1/models?realm='+encodeURIComponent(realm))));
+    const names=[...new Set(rows.flatMap(r=>(r.data||[]).filter(m=>m.enabled!==false).map(m=>m.id)))];
+    box.innerHTML=names.map(n=>'<span class="qd-model" data-no-i18n>'+esc(n)+'</span>').join('')||esc(qdText('暂无可用模型'));
+  }catch(e){box.textContent=e.message;}
+}
+function qdShowLegacy(tab){
+  stopQoderWorkspace();document.getElementById('qdNative').hidden=true;openQoderPanel(tab);
 }
 let qoderPanelLoad = null;
 let qoderPanelNavigate = null;
@@ -18416,6 +18701,7 @@ let qoderRequestedTab = 'gateway';
 let qoderPanelCancel = null;
 
 function resetQoderPanel(){
+  stopQoderWorkspace();
   qoderPanelGeneration++;
   if(qoderPanelCancel) qoderPanelCancel();
   qoderPanelCancel = null;
@@ -18426,6 +18712,9 @@ function resetQoderPanel(){
 }
 
 function showQoderView(tab){
+  if(['gateway','accounts','tasks'].includes(tab)){ qdSetView(tab);return; }
+  stopQoderWorkspace();
+  document.getElementById('qdNative').hidden=true;
   const controls = document.getElementById('qoderPlatformControls');
   if(controls) controls.hidden = tab !== 'accounts';
   openQoderPanel(tab);
