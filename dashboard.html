@@ -1231,6 +1231,9 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
 #pageAnalytics .skel{color:var(--dim2);font-size:12px;padding:22px 0;text-align:center}
 #pageAnalytics .foot-note{color:var(--dim2);font-size:11px;text-align:center;margin-top:20px}
 
+.slot-latency{font-family:var(--mono,monospace);font-size:12px;font-weight:650;font-variant-numeric:tabular-nums;white-space:nowrap}
+.slot-latency-ok{color:var(--accent2)}.slot-latency-warn{color:var(--warn)}.slot-latency-bad{color:var(--bad)}.slot-latency-muted{color:var(--dim)}
+.slot-latency-legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin:10px 0}
 /* ── 自定义下拉（Custom Select）────────────────────────────────────
    原生 <select> 的展开列表由浏览器绘制，CSS 无法美化：深色模式下
    会出现突兀的直角白框/系统蓝高亮，与暖色主题割裂。
@@ -1495,6 +1498,17 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
   var ATTRS = ['title', 'placeholder', 'aria-label', 'data-label', 'alt'];
   var SKIP = {SCRIPT: 1, STYLE: 1, TEXTAREA: 1, NOSCRIPT: 1};
   var DICT = {
+    "延迟": "Latency",
+    "已过期": "Stale",
+    "连接异常": "Connection issue",
+    "切换中": "Switching",
+    "探测中…": "Checking…",
+    "最近探测时间": "Last probe time",
+    ">800 ms / 不可用": ">800 ms / unavailable",
+    "延迟为代理 HTTPS 探测耗时，不代表模型响应速度；悬停查看探测时间。": "Latency measures a proxy HTTPS probe, not model response time. Hover for the probe timestamp.",
+    "不可用": "Unavailable",
+    "未探测": "Not checked",
+    "已停用": "Disabled",
     "Qoder 控制台": "Qoder console",
     "Qoder 账号管理": "Qoder accounts",
     "Qoder 任务与福利": "Qoder tasks and rewards",
@@ -2917,6 +2931,17 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     '猫猫正在旅行途中，请稍后再来查看！': 'The cat is still travelling; check again later!'
   };
   var HANT_PHRASES = {
+    "延迟": "延遲",
+    "已过期": "已過期",
+    "连接异常": "連線異常",
+    "切换中": "切換中",
+    "探测中…": "探測中…",
+    "最近探测时间": "最近探測時間",
+    ">800 ms / 不可用": ">800 ms / 無法使用",
+    "延迟为代理 HTTPS 探测耗时，不代表模型响应速度；悬停查看探测时间。": "延遲為代理 HTTPS 探測耗時，不代表模型回應速度；游標停留可查看探測時間。",
+    "不可用": "無法使用",
+    "未探测": "未探測",
+    "已停用": "已停用",
     "Qoder 控制台": "Qoder 控制台",
     "Qoder 账号管理": "Qoder 帳號管理",
     "Qoder 任务与福利": "Qoder 任務與福利",
@@ -14603,6 +14628,9 @@ async function loadProxyHealth(){
   try{
     const data = await getJSON('/proxy/health');
     const cfg = data.config || {};
+    SLOT_HEALTH_ROWS = data.slots || {};
+    SLOT_HEALTH_TTL = Math.max(120, Number(cfg.interval || 90) * 3);
+    refreshProxySlotLatencies();
     if(!PROXY_HEALTH_DIRTY){
       document.getElementById('proxyHealthEnabled').checked = !!cfg.enabled;
       document.getElementById('proxyHealthCross').checked = !!cfg.allow_cross_country;
@@ -14618,7 +14646,7 @@ async function loadProxyHealth(){
     document.getElementById('proxyHealthRows').innerHTML = Object.values(data.slots || {}).map(r =>
       '<div class="mono" style="font-size:12px;padding:5px 0">'+esc(r.id)+' · '+esc(r.node || '-')
       +' · '+esc(r.ip || '-')+' · '+esc(r.status || 'unknown')+' · failures: '+Number(r.failures || 0)
-      +' · '+esc(r.latency_ms == null ? '-' : r.latency_ms+'ms')
+      +' · '+slotLatencyHtml({id:r.id,url:r.url,enabled:true})
       +' · '+esc(r.checked_at ? new Date(r.checked_at*1000).toLocaleString() : '-')
       +' · '+esc(r.reason || '')+' '+esc(r.error || '')+'</div>').join('');
     document.getElementById('proxyHealthHistory').innerHTML = (data.history || []).slice().reverse().map(r =>
@@ -14720,6 +14748,38 @@ function slotExitHtml(s){
     + (where || '<span style="color:var(--dim-light)">国家未知</span>') + '</div>';
 }
 
+// Probe latency includes the proxy connection and a tiny HTTPS IP response,
+// not ICMP ping or model response time. Runtime health always wins by timestamp.
+let SLOT_HEALTH_ROWS = {}, SLOT_MANUAL_PROBES = new Map(), SLOT_HEALTH_TTL = 270;
+function slotLatencyState(slot, now){
+  now = now == null ? Date.now()/1000 : now;
+  const health=SLOT_HEALTH_ROWS[slot.id];
+  const candidates=[health && health.url===slot.url ? health : null,SLOT_MANUAL_PROBES.get(slot.url)].filter(Boolean);
+  const row=candidates.sort((a,b)=>(b.checked_at||0)-(a.checked_at||0))[0];
+  if(slot.enabled===false) return {tone:'muted',text:'已停用'};
+  if(!row || !Number.isFinite(row.checked_at)) return {tone:'muted',text:'未探测'};
+  const stamp=new Date(row.checked_at*1000).toLocaleString();
+  if(now-row.checked_at>SLOT_HEALTH_TTL) return {tone:'muted',text:'已过期',detail:'最近探测时间'+' · '+stamp};
+  if(row.status==='unavailable') return {tone:'bad',text:'不可用',detail:'最近探测时间'+' · '+stamp};
+  if(row.status==='suspect') return {tone:'warn',text:'连接异常',detail:'最近探测时间'+' · '+stamp};
+  if(row.status==='switching') return {tone:'warn',text:'切换中',detail:'最近探测时间'+' · '+stamp};
+  if(row.status==='checking') return {tone:'muted',text:'探测中…'};
+  if(row.status!=='healthy' || typeof row.latency_ms!=='number' || !Number.isFinite(row.latency_ms) || row.latency_ms<0) return {tone:'muted',text:'未探测'};
+  const ms=Math.round(row.latency_ms);
+  return {tone:ms<=300?'ok':ms<=800?'warn':'bad',text:ms+' ms',detail:'最近探测时间'+' · '+stamp};
+}
+function slotLatencyHtml(slot){
+  const state=slotLatencyState(slot);
+  return '<span class="slot-latency slot-latency-'+state.tone+'"'
+    +(state.detail?' title="'+esc(state.detail)+'"':'')+'>'+esc(state.text)+'</span>';
+}
+function refreshProxySlotLatencies(){
+  document.querySelectorAll('[data-slot-latency-index]').forEach(el=>{
+    const s=PROXY_SLOTS[Number(el.dataset.slotLatencyIndex)];
+    if(s) el.innerHTML=slotLatencyHtml(s);
+  });
+}
+
 function renderProxySlots(){
   const box = document.getElementById('slotList');
   if(!box) return;
@@ -14732,6 +14792,7 @@ function renderProxySlots(){
     + '<th style="width:150px">名称</th>'
     + '<th>代理地址</th>'
     + '<th style="width:150px">出口</th>'
+    + '<th style="width:110px">延迟</th>'
     + '<th style="width:90px;text-align:center">启用</th>'
     + '<th style="width:90px;text-align:center">绑定账号</th>'
     + '<th style="width:190px;text-align:center">操作</th>'
@@ -14739,10 +14800,11 @@ function renderProxySlots(){
     + PROXY_SLOTS.map((s, i) =>
         '<tr>'
         + '<td data-label="名称"><input value="' + esc(s.name || '') + '" placeholder="' + esc(s.label || '') + '" oninput="PROXY_SLOTS[' + i + '].name=this.value; markSlotsDirty()" class="slot-input"></td>'
-        + '<td data-label="代理地址"><input value="' + esc(s.url || '') + '" oninput="PROXY_SLOTS[' + i + '].url=this.value; markSlotsDirty()" class="slot-input mono"></td>'
+        + '<td data-label="代理地址"><input value="' + esc(s.url || '') + '" oninput="PROXY_SLOTS[' + i + '].url=this.value; markSlotsDirty(); refreshProxySlotLatencies()" class="slot-input mono"></td>'
         + '<td data-label="出口">' + slotExitHtml(s) + '</td>'
+        + '<td data-label="延迟" data-slot-latency-index="'+i+'">'+slotLatencyHtml(s)+'</td>'
         + '<td style="text-align:center" data-label="启用"><input type="checkbox" ' + (s.enabled === false ? '' : 'checked')
-        +   ' onchange="PROXY_SLOTS[' + i + '].enabled=this.checked; markSlotsDirty()"></td>'
+        +   ' onchange="PROXY_SLOTS[' + i + '].enabled=this.checked; markSlotsDirty(); refreshProxySlotLatencies()"></td>'
         + '<td style="text-align:center" data-label="绑定账号">' + (s.bound || 0) + '</td>'
         + '<td style="text-align:center;white-space:nowrap" data-label="">'
         +   '<button class="sec mini" onclick="testProxySlot(' + i + ', this)">测试</button> '
@@ -14750,6 +14812,7 @@ function renderProxySlots(){
         + '</td></tr>'
       ).join('')
     + '</tbody></table></div>'
+    + '<div class="legend slot-latency-legend"><span class="slot-latency slot-latency-ok">≤300 ms</span><span class="slot-latency slot-latency-warn">301–800 ms</span><span class="slot-latency slot-latency-bad">&gt;800 ms / 不可用</span><span>延迟为代理 HTTPS 探测耗时，不代表模型响应速度；悬停查看探测时间。</span></div>'
     + '<div class="legend"><span>「绑定账号」只统计已启用账号；停用账号会自动释放槽位，重新启用后需重新绑定。在网关页账号表的「出口」下拉中调整绑定。名称留空时按出口自动显示「国家 类型」，点「测试」会补全出口信息并据此命名。</span></div>';
   applyTableSort('slotList');
 }
@@ -14799,7 +14862,9 @@ async function testProxySlot(index, btn){
       renderProxySlots();
       id = (PROXY_SLOTS[index] || {}).id;
     }
+    SLOT_MANUAL_PROBES.set(s.url,{status:'checking',checked_at:Date.now()/1000});refreshProxySlotLatencies();
     const r = await postJSON('/proxy/slots/test', {id: id});
+    SLOT_MANUAL_PROBES.set(s.url,{status:r.ok?'healthy':'unavailable',latency_ms:r.latency_ms,checked_at:Date.now()/1000});refreshProxySlotLatencies();
     if(r.ok){
       // 服务端已把出口信息写进槽位，这里只把这一行同步过来，不整表重载——
       // 其他行里还没保存的输入都还在 PROXY_SLOTS 里，重绘不会丢。
@@ -14818,6 +14883,7 @@ async function testProxySlot(index, btn){
       toast('测试失败: ' + (r.error || 'unknown'), 'bad');
     }
   }catch(e){
+    SLOT_MANUAL_PROBES.set(s.url,{status:'unavailable',checked_at:Date.now()/1000});refreshProxySlotLatencies();
     toast('测试失败: ' + e.message, 'bad');
   }finally{
     if(btn){ btn.disabled = false; btn.textContent = '测试'; }
@@ -14866,6 +14932,7 @@ function importDiscovered(){
   if(!picked.length){ toast('没有勾选任何出口', 'warn'); return; }
   picked.forEach(c => {
     if(PROXY_SLOTS.some(s => s.url === c.url)) return;
+    SLOT_MANUAL_PROBES.set(c.url,{status:c.reachable?'healthy':'unavailable',latency_ms:c.latency_ms,checked_at:Date.now()/1000});
     // 导入时就把探测到的出口信息一起带上。名称留空：空名称 = 「按出口自动命名」，
     // 标签由 country/ip_type 每次现算，所以出口换了名字跟着换；写进 name 就成了
     // 用户名称，会被 slot_label() 永久优先，出口变了也还显示旧的国家。
