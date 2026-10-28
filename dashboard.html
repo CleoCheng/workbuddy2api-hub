@@ -1498,6 +1498,15 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
   var ATTRS = ['title', 'placeholder', 'aria-label', 'data-label', 'alt'];
   var SKIP = {SCRIPT: 1, STYLE: 1, TEXTAREA: 1, NOSCRIPT: 1};
   var DICT = {
+    "批量测试进行中，请稍后保存槽位。": "Batch test is running. Save slots after it finishes.",
+    "一键测试全部槽位": "Test all proxy slots",
+    "代理槽对应 Mihomo 监听端口，不等于订阅节点数；一个出口组可以引用两个订阅的全部节点。扩展槽位需先新增监听端口并调整发现范围，独立探测端口不应导入账号槽位。": "Proxy slots are Mihomo listeners, not subscription nodes. Each exit group can use both subscriptions. Add listeners and adjust the discovery range to expand slots; never import the dedicated probe listener.",
+    "请先保存槽位，再测试全部端口。": "Save proxy slots before testing all ports.",
+    "还没有可测试的代理槽。": "No proxy slots to test.",
+    "全部测试完成": "All tests completed",
+    "正在测试全部槽位": "Testing all proxy slots",
+    "通过": "Passed",
+    "失败": "Failed",
     "延迟": "Latency",
     "已过期": "Stale",
     "连接异常": "Connection issue",
@@ -2931,6 +2940,15 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     '猫猫正在旅行途中，请稍后再来查看！': 'The cat is still travelling; check again later!'
   };
   var HANT_PHRASES = {
+    "批量测试进行中，请稍后保存槽位。": "批次測試進行中，請稍後儲存槽位。",
+    "一键测试全部槽位": "一鍵測試全部槽位",
+    "代理槽对应 Mihomo 监听端口，不等于订阅节点数；一个出口组可以引用两个订阅的全部节点。扩展槽位需先新增监听端口并调整发现范围，独立探测端口不应导入账号槽位。": "代理槽對應 Mihomo 監聽埠，不等於訂閱節點數；一個出口群組可引用兩個訂閱的全部節點。擴充槽位需先新增監聽埠並調整探索範圍，獨立探測埠不應匯入帳號槽位。",
+    "请先保存槽位，再测试全部端口。": "請先儲存槽位，再測試全部埠。",
+    "还没有可测试的代理槽。": "尚無可測試的代理槽。",
+    "全部测试完成": "全部測試完成",
+    "正在测试全部槽位": "正在測試全部槽位",
+    "通过": "通過",
+    "失败": "失敗",
     "延迟": "延遲",
     "已过期": "已過期",
     "连接异常": "連線異常",
@@ -5106,10 +5124,13 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="sec" onclick="discoverProxySlots(this)">自动发现 mihomo 端口</button>
+          <button class="sec" id="slotBatchTestButton" onclick="testAllProxySlots(this)">一键测试全部槽位</button>
           <button class="sec" onclick="addProxySlotRow()">+ 添加槽位</button>
           <button onclick="saveProxySlots(this)">保存槽位</button>
         </div>
       </div>
+      <p class="hint">代理槽对应 Mihomo 监听端口，不等于订阅节点数；一个出口组可以引用两个订阅的全部节点。扩展槽位需先新增监听端口并调整发现范围，独立探测端口不应导入账号槽位。</p>
+      <div id="slotBatchState" role="status" style="font-size:12px;margin:10px 0" hidden></div>
       <div id="slotList"></div>
       <div id="slotDiscover"></div>
       <details style="margin-top:18px" id="proxyHealthDetails">
@@ -14612,7 +14633,7 @@ async function setAccountSlot(uid, slotId, el){
 async function loadProxySlots(force){
   loadProxyHealth();
   // 编辑器有未保存改动时不动它：轮询与「切到设置页」都不该覆盖正在填的内容。
-  if(SLOTS_DIRTY && !force) return;
+  if(SLOT_BATCH_RUNNING || (SLOTS_DIRTY && !force)) return;
   try{
     const r = await getJSON('/proxy/slots');
     PROXY_SLOTS = r.slots || [];
@@ -14751,6 +14772,7 @@ function slotExitHtml(s){
 // Probe latency includes the proxy connection and a tiny HTTPS IP response,
 // not ICMP ping or model response time. Runtime health always wins by timestamp.
 let SLOT_HEALTH_ROWS = {}, SLOT_MANUAL_PROBES = new Map(), SLOT_HEALTH_TTL = 270;
+let SLOT_BATCH_RUNNING = false, SLOT_SINGLE_TESTS = 0;
 function slotLatencyState(slot, now){
   now = now == null ? Date.now()/1000 : now;
   const health=SLOT_HEALTH_ROWS[slot.id];
@@ -14807,7 +14829,7 @@ function renderProxySlots(){
         +   ' onchange="PROXY_SLOTS[' + i + '].enabled=this.checked; markSlotsDirty(); refreshProxySlotLatencies()"></td>'
         + '<td style="text-align:center" data-label="绑定账号">' + (s.bound || 0) + '</td>'
         + '<td style="text-align:center;white-space:nowrap" data-label="">'
-        +   '<button class="sec mini" onclick="testProxySlot(' + i + ', this)">测试</button> '
+        +   '<button class="sec mini" onclick="testProxySlot(' + i + ', this)"'+(SLOT_BATCH_RUNNING?' disabled':'')+'>测试</button> '
         +   '<button class="danger mini" onclick="removeProxySlot(' + i + ')">删除</button>'
         + '</td></tr>'
       ).join('')
@@ -14834,6 +14856,7 @@ function removeProxySlot(index){
 }
 
 async function saveProxySlots(btn){
+  if(SLOT_BATCH_RUNNING){toast(slotBatchText('批量测试进行中，请稍后保存槽位。'),'warn');return;}
   if(btn) btn.disabled = true;
   try{
       const r = await postJSON('/proxy/slots/save', {slots: slotPayload()});
@@ -14850,8 +14873,10 @@ async function saveProxySlots(btn){
 }
 
 async function testProxySlot(index, btn){
+  if(SLOT_BATCH_RUNNING) return;
   const s = PROXY_SLOTS[index];
   if(!s || !s.url){ toast('槽位还没有填写代理地址', 'warn'); return; }
+  SLOT_SINGLE_TESTS++;
   if(btn){ btn.disabled = true; btn.textContent = '测试中...'; }
   try{
     let id = s.id;
@@ -14886,7 +14911,62 @@ async function testProxySlot(index, btn){
     SLOT_MANUAL_PROBES.set(s.url,{status:'unavailable',checked_at:Date.now()/1000});refreshProxySlotLatencies();
     toast('测试失败: ' + e.message, 'bad');
   }finally{
+    SLOT_SINGLE_TESTS--;
     if(btn){ btn.disabled = false; btn.textContent = '测试'; }
+  }
+}
+
+function slotBatchText(text){
+  const i=window.WB_I18N;
+  return !i||i.current()==='zh'?text:i.current()==='zh-Hant'?i.translateHant(text):i.translate(text);
+}
+async function testAllProxySlots(btn){
+  if(SLOT_BATCH_RUNNING || SLOT_SINGLE_TESTS) return;
+  const state=document.getElementById('slotBatchState');
+  state.hidden=false;
+  if(SLOTS_DIRTY || PROXY_SLOTS.some(s=>!s.id || !s.url)){
+    state.textContent=slotBatchText('请先保存槽位，再测试全部端口。');return;
+  }
+  const slots=PROXY_SLOTS.map(s=>({id:s.id,url:s.url}));
+  if(!slots.length){state.textContent=slotBatchText('还没有可测试的代理槽。');return;}
+  SLOT_BATCH_RUNNING=true;
+  if(btn) btn.disabled=true;
+  let next=0,completed=0,passed=0;
+  const failures=[];
+  const progress=()=>{
+    state.textContent=slotBatchText(completed===slots.length?'全部测试完成':'正在测试全部槽位')+' · '+completed+'/'+slots.length+' · '+passed+' '+slotBatchText('通过')+' · '+failures.length+' '+slotBatchText('失败');
+    if(failures.length) state.textContent+='\n'+failures.map(r=>r.id+': '+r.error).join('\n');
+  };
+  state.style.whiteSpace='pre-wrap';progress();
+  // Include disabled slots as a connectivity check, without enabling or rebinding.
+  async function worker(){
+    while(next<slots.length){
+      const s=slots[next++];
+      SLOT_MANUAL_PROBES.set(s.url,{status:'checking',checked_at:Date.now()/1000});refreshProxySlotLatencies();
+      try{
+        const r=await postJSON('/proxy/slots/test',{id:s.id});
+        SLOT_MANUAL_PROBES.set(s.url,{status:r.ok?'healthy':'unavailable',latency_ms:r.latency_ms,checked_at:Date.now()/1000});
+        if(r.ok){
+          passed++;
+          const row=PROXY_SLOTS.find(v=>v.id===s.id && v.url===s.url);
+          if(row&&r.slot){
+            ['ip','country','country_code','ip_type','isp','asn','probed_at'].forEach(k=>{if(r.slot[k]!==undefined)row[k]=r.slot[k];});
+            row.label=row.name||autoSlotName(row)||row.id;
+          }
+        }else failures.push({id:s.id,error:r.error||'不可用'});
+      }catch(e){
+        SLOT_MANUAL_PROBES.set(s.url,{status:'unavailable',checked_at:Date.now()/1000});
+        failures.push({id:s.id,error:String(e.message||e)});
+      }finally{completed++;refreshProxySlotLatencies();progress();}
+    }
+  }
+  try{await Promise.all(Array.from({length:Math.min(3,slots.length)},()=>worker()));}
+  finally{
+    SLOT_BATCH_RUNNING=false;if(btn)btn.disabled=false;
+    // Preserve edits and focus made during the check; only latencies need repaint.
+    if(!SLOTS_DIRTY && !document.getElementById('slotList').contains(document.activeElement))renderProxySlots();
+    else refreshProxySlotLatencies();
+    progress();
   }
 }
 

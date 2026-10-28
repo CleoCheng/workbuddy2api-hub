@@ -60,6 +60,17 @@ replays inference requests.
 
 ## 状态、恢复与回滚 / State, recovery and rollback
 
+「一键测试全部槽位」以三个并发检查所有已保存的端口（含停用槽位），逐项更新
+延迟并显示进度、通过/失败数量及错误。测试不会启用槽位或改动账号绑定；有未保存
+编辑时先保存再测试。检查器与手动测试测量当前监听端口，不遍历订阅里的每个节点。
+
+Test all saved slots checks every configured port, including disabled slots,
+with three workers and live results. It does not enable slots or rebind accounts;
+save pending edits first. A port is a Mihomo listener/selector, not a subscription
+node. Multiple listeners can share both providers' node catalogs. To add ports,
+configure additional listeners and the gateway's `WB_PROXY_DISCOVER_PORTS` range;
+never import the dedicated spare probe listener as an account slot.
+
 代理槽列表的「延迟」列复用最近探测结果：≤300 ms 绿色、301–800 ms 黄色、
 >800 ms 红色。连接异常和不可用时不沿用上次成功延迟；超过三个检查周期
 （至少 120 秒）的结果置灰显示已过期，悬停显示探测时间。此值包含代理连接和
