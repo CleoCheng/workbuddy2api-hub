@@ -15314,7 +15314,9 @@ async function loadProxySubscriptions(){
     document.getElementById('proxySubscriptionsState').textContent=data.available?'':proxyAdminError(data.error || 'subscription_management_not_configured');
     document.getElementById('proxySubscriptionsList').innerHTML=PROXY_SUBSCRIPTIONS.map((s,i)=>
       '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--line)">'
-      +'<b>'+esc(s.name)+'</b><span class="mono">'+esc(s.source)+'</span>'
+      +'<b>'+esc(s.name)+'</b>'
+      +(s.tag ? ' <span class="badge" style="font-size:11px;font-weight:600;opacity:0.9">'+esc(s.tag)+'</span>' : '')
+      +'<span class="mono">'+esc(s.source)+'</span>'
       +'<span>'+slotBatchText(s.enabled?'已启用':'已停用')+' · '+Number(s.nodes || 0)+' '+slotBatchText('节点')+' · '+slotBatchText('刷新周期: ')+fmtSubInterval(s.interval)+'</span>'
       +'<button class="sec mini" onclick="openProxySubscription('+i+')">'+slotBatchText('编辑')+'</button>'
       +'<button class="sec mini" onclick="viewSubscriptionNodes('+i+')">'+slotBatchText('查看节点')+'</button>'

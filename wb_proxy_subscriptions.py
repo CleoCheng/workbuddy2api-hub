@@ -59,6 +59,20 @@ def _groups(mon):
     return set(mon.cfg['groups'].values()) | {mon.cfg['probe_group']}
 
 
+def extract_group_tag(name_or_node):
+    if not name_or_node:
+        return ""
+    s = str(name_or_node).strip()
+    m = re.match(r"^(\[[^\]]+\]|\([^\)]+\)|【[^】]+】)", s)
+    if m:
+        inner = m.group(1)[1:-1].strip()
+        return f"[{inner}]" if inner else ""
+    p_match = re.search(r"(?:subscription|sub)[-_ ]?([a-zA-Z0-9]+)", s, re.IGNORECASE)
+    if p_match:
+        return f"[{p_match.group(1).upper()}]"
+    return ""
+
+
 def view(mon):
     try:
         _, data = _load()
@@ -77,10 +91,19 @@ def view(mon):
         # Tokens may be in query strings OR paths. Only the hostname is returned.
         host = urllib.parse.urlsplit(str(provider.get('url', ''))).hostname or ''
         status = live.get(name, {})
-        rows.append(dict(name=name, source='https://' + host + '/••••',
+        proxies = status.get('proxies', [])
+        tag = ''
+        for p in proxies[:5]:
+            t = extract_group_tag(p.get('name', ''))
+            if t:
+                tag = t
+                break
+        if not tag:
+            tag = extract_group_tag(name)
+        rows.append(dict(name=name, tag=tag, source='https://' + host + '/••••',
                          enabled=name in active, interval=provider.get('interval', 3600),
-                         nodes=len(status.get('proxies', [])), updated_at=status.get('updatedAt', ''),
-                         connected=bool(status.get('proxies'))))
+                         nodes=len(proxies), updated_at=status.get('updatedAt', ''),
+                         connected=bool(proxies)))
     return dict(available=True, providers=rows)
 
 
