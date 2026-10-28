@@ -1582,6 +1582,55 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     "故障复核后自动切换；排名模式还可优化慢节点。按实际 IP 去重，无备用的故障槽暂停新请求，账号绑定保持不变。": "Confirmed failures trigger failover; ranking can also optimize slow nodes. Deduplicate actual IPs and pause failed slots without a spare. Account bindings stay fixed.",
     "启用代理健康检查": "Enable proxy health checks",
     "按订阅全量测速排名选节点": "Select nodes by full subscription latency ranking",
+    "订阅管理": "Subscription management",
+    "节点": "Node",
+    "类型": "Type",
+    "支持同时使用多个订阅。订阅地址含访问凭证，仅在服务器保存；修改时留空保留原地址。": "Multiple subscriptions can run together. Subscription credentials stay on the server; leave the URL blank to keep it.",
+    "新增订阅": "Add subscription",
+    "刷新订阅列表": "Reload subscriptions",
+    "更换代理节点": "Change proxy node",
+    "按实测延迟选择其他出口；已被占用的 IP 不可选。手动选择会保留，故障或持续高延迟时仍可自动接管。": "Choose another exit by measured latency. Occupied IPs cannot be selected. Manual choices are retained; failures or sustained slowness still allow automatic recovery.",
+    "筛选节点": "Filter nodes",
+    "节点、IP 或国家": "Node, IP or country",
+    "恢复自动选择": "Resume automatic selection",
+    "刷新可选节点": "Reload node choices",
+    "编辑代理订阅": "Edit proxy subscription",
+    "订阅名称": "Subscription name",
+    "订阅地址": "Subscription URL",
+    "订阅刷新间隔（秒）": "Subscription refresh interval (seconds)",
+    "将此订阅加入出口组": "Use this subscription in exit groups",
+    "保存并应用订阅": "Save and apply subscription",
+    "更换": "Change",
+    "刷新订阅": "Refresh subscription",
+    "正在应用订阅…": "Applying subscription…",
+    "订阅已应用，正在更新节点排名。": "Subscription applied; updating node rankings.",
+    "订阅已刷新，正在更新节点排名。": "Subscription refreshed; updating node rankings.",
+    "请先保存槽位并等待端口测试结束。": "Save slots and wait for port checks to finish first.",
+    "正在加载节点…": "Loading nodes…",
+    "手动保留": "Manual choice retained",
+    "自动选择": "Automatic selection",
+    "全量测速中，请等待完成后更换。": "Full scan running; wait before changing nodes.",
+    "出口 IP": "Exit IP",
+    "已被其他槽位占用": "Used by another slot",
+    "国家限制": "Country restriction",
+    "暂无匹配节点，请先完成全量测速。": "No matching nodes. Complete a full scan first.",
+    "正在复测并更换节点…": "Rechecking and changing node…",
+    "已恢复自动选择": "Automatic selection resumed",
+    "节点已更换，故障时仍会自动接管。": "Node changed; automatic recovery remains available.",
+    "健康检查正在运行，请等待结束后重试。": "Health checks are running; retry when they finish.",
+    "订阅管理尚未在服务器启用。": "Subscription management is not enabled on this server.",
+    "服务器订阅配置格式尚未准备好。": "The server subscription configuration needs preparation.",
+    "请输入有效的公网 HTTPS 订阅地址。": "Enter a valid public HTTPS subscription URL.",
+    "订阅名称只能包含文字、数字、下划线或短横线，最长 40 个字符。": "Use up to 40 letters, digits, underscores or hyphens for the subscription name.",
+    "订阅刷新间隔必须为 300 至 86400 秒。": "Subscription refresh interval must be 300–86400 seconds.",
+    "订阅应用失败，已恢复原配置。请检查地址和订阅格式。": "Could not apply subscription; the previous configuration was restored. Check the URL and format.",
+    "订阅刷新失败，请检查服务商状态。": "Subscription refresh failed. Check provider availability.",
+    "订阅配置验证失败，原配置保持不变。": "Subscription configuration validation failed; the previous configuration is retained.",
+    "出口组至少需要启用一个订阅。": "Keep at least one subscription enabled in exit groups.",
+    "其他槽位出口尚未确认，请先完成健康检查。": "Other slot exits are unverified. Complete health checks first.",
+    "请先完成全量测速，再选择可用节点。": "Complete a full scan before selecting a measured node.",
+    "候选节点复测失败或 IP 已被占用，未执行更换。": "Candidate recheck failed or its IP is occupied; no change was made.",
+    "请先启用该槽位并配置健康检查与出口组映射。": "Enable the slot and configure health checks and its selector mapping first.",
     "全量测速间隔（秒）": "Full scan interval (seconds)",
     "高延迟阈值（ms）": "High latency threshold (ms)",
     "连续高延迟次数": "Consecutive slow checks",
@@ -3033,6 +3082,55 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     "故障复核后自动切换；排名模式还可优化慢节点。按实际 IP 去重，无备用的故障槽暂停新请求，账号绑定保持不变。": "故障複核後自動切換；排名模式還可最佳化慢節點。按實際 IP 去重，無備用的故障槽暫停新請求，帳號繫結保持不變。",
     "启用代理健康检查": "啟用代理健康檢查",
     "按订阅全量测速排名选节点": "按訂閱全量測速排名選節點",
+    "订阅管理": "訂閱管理",
+    "节点": "節點",
+    "类型": "類型",
+    "支持同时使用多个订阅。订阅地址含访问凭证，仅在服务器保存；修改时留空保留原地址。": "支援同時使用多個訂閱。訂閱位址含存取憑證，僅在伺服器儲存；修改時留空保留原位址。",
+    "新增订阅": "新增訂閱",
+    "刷新订阅列表": "重新整理訂閱清單",
+    "更换代理节点": "更換代理節點",
+    "按实测延迟选择其他出口；已被占用的 IP 不可选。手动选择会保留，故障或持续高延迟时仍可自动接管。": "按實測延遲選擇其他出口；已被佔用的 IP 不可選。手動選擇會保留，故障或持續高延遲時仍可自動接管。",
+    "筛选节点": "篩選節點",
+    "节点、IP 或国家": "節點、IP 或國家",
+    "恢复自动选择": "恢復自動選擇",
+    "刷新可选节点": "重新整理可選節點",
+    "编辑代理订阅": "編輯代理訂閱",
+    "订阅名称": "訂閱名稱",
+    "订阅地址": "訂閱位址",
+    "订阅刷新间隔（秒）": "訂閱重新整理間隔（秒）",
+    "将此订阅加入出口组": "將此訂閱加入出口組",
+    "保存并应用订阅": "儲存並套用訂閱",
+    "更换": "更換",
+    "刷新订阅": "重新整理訂閱",
+    "正在应用订阅…": "正在套用訂閱…",
+    "订阅已应用，正在更新节点排名。": "訂閱已套用，正在更新節點排名。",
+    "订阅已刷新，正在更新节点排名。": "訂閱已重新整理，正在更新節點排名。",
+    "请先保存槽位并等待端口测试结束。": "請先儲存槽位並等待埠測試結束。",
+    "正在加载节点…": "正在載入節點…",
+    "手动保留": "手動保留",
+    "自动选择": "自動選擇",
+    "全量测速中，请等待完成后更换。": "全量測速中，請等待完成後更換。",
+    "出口 IP": "出口 IP",
+    "已被其他槽位占用": "已被其他槽位佔用",
+    "国家限制": "國家限制",
+    "暂无匹配节点，请先完成全量测速。": "暫無相符節點，請先完成全量測速。",
+    "正在复测并更换节点…": "正在複測並更換節點…",
+    "已恢复自动选择": "已恢復自動選擇",
+    "节点已更换，故障时仍会自动接管。": "節點已更換，故障時仍會自動接管。",
+    "健康检查正在运行，请等待结束后重试。": "健康檢查正在執行，請等待結束後重試。",
+    "订阅管理尚未在服务器启用。": "訂閱管理尚未在伺服器啟用。",
+    "服务器订阅配置格式尚未准备好。": "伺服器訂閱配置格式尚未準備好。",
+    "请输入有效的公网 HTTPS 订阅地址。": "請輸入有效的公網 HTTPS 訂閱位址。",
+    "订阅名称只能包含文字、数字、下划线或短横线，最长 40 个字符。": "訂閱名稱只能包含文字、數字、底線或短橫線，最長 40 個字元。",
+    "订阅刷新间隔必须为 300 至 86400 秒。": "訂閱重新整理間隔必須為 300 至 86400 秒。",
+    "订阅应用失败，已恢复原配置。请检查地址和订阅格式。": "訂閱套用失敗，已恢復原配置。請檢查位址和訂閱格式。",
+    "订阅刷新失败，请检查服务商状态。": "訂閱重新整理失敗，請檢查服務商狀態。",
+    "订阅配置验证失败，原配置保持不变。": "訂閱配置驗證失敗，原配置保持不變。",
+    "出口组至少需要启用一个订阅。": "出口組至少需要啟用一個訂閱。",
+    "其他槽位出口尚未确认，请先完成健康检查。": "其他槽位出口尚未確認，請先完成健康檢查。",
+    "请先完成全量测速，再选择可用节点。": "請先完成全量測速，再選擇可用節點。",
+    "候选节点复测失败或 IP 已被占用，未执行更换。": "候選節點複測失敗或 IP 已被佔用，未執行更換。",
+    "请先启用该槽位并配置健康检查与出口组映射。": "請先啟用該槽位並配置健康檢查與出口組映射。",
     "全量测速间隔（秒）": "全量測速間隔（秒）",
     "高延迟阈值（ms）": "高延遲閾值（ms）",
     "连续高延迟次数": "連續高延遲次數",
@@ -5151,6 +5249,14 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
       <div id="slotBatchState" role="status" style="font-size:12px;margin:10px 0" hidden></div>
       <div id="slotList"></div>
       <div id="slotDiscover"></div>
+      <details style="margin-top:18px" id="proxySubscriptionsDetails">
+        <summary>订阅管理</summary>
+        <p class="hint">支持同时使用多个订阅。订阅地址含访问凭证，仅在服务器保存；修改时留空保留原地址。</p>
+        <button class="sec" onclick="openProxySubscription()">新增订阅</button>
+        <button class="sec" onclick="loadProxySubscriptions()">刷新订阅列表</button>
+        <div id="proxySubscriptionsState" role="status"></div>
+        <div id="proxySubscriptionsList"></div>
+      </details>
       <details style="margin-top:18px" id="proxyHealthDetails">
         <summary>代理健康检查与自动切换</summary>
         <p>故障复核后自动切换；排名模式还可优化慢节点。按实际 IP 去重，无备用的故障槽暂停新请求，账号绑定保持不变。</p>
@@ -6203,6 +6309,36 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
   <footer>每 5 秒自动刷新 · 数据来自本机反代 <span class="mono" id="logfile"></span></footer>
 </main>
 
+<div class="modal-mask" id="proxyNodeModal" onkeydown="if(event.key==='Escape')closeProxyNodeModal()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="proxyNodeTitle" style="width:min(960px,96vw)">
+    <div class="modal-hd"><h2 id="proxyNodeTitle">更换代理节点</h2><button class="modal-x" onclick="closeProxyNodeModal()" aria-label="关闭">×</button></div>
+    <div class="modal-bd" style="max-height:65vh;overflow:auto">
+      <p class="hint">按实测延迟选择其他出口；已被占用的 IP 不可选。手动选择会保留，故障或持续高延迟时仍可自动接管。</p>
+      <div id="proxyNodeState" role="status"></div>
+      <label>筛选节点 <input id="proxyNodeFilter" oninput="renderProxyNodeChoices()" placeholder="节点、IP 或国家"></label>
+      <div id="proxyNodeChoices"></div>
+    </div>
+    <div class="modal-ft">
+      <button class="sec" onclick="resumeProxySlotAuto(this)">恢复自动选择</button>
+      <button class="sec" onclick="refreshProxyNodeChoices()">刷新可选节点</button>
+      <button class="sec" onclick="closeProxyNodeModal()">关闭</button>
+    </div>
+  </div>
+</div>
+<div class="modal-mask" id="proxySubscriptionModal" onkeydown="if(event.key==='Escape')closeProxySubscription()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="proxySubscriptionTitle" style="width:min(640px,96vw)">
+    <div class="modal-hd"><h2 id="proxySubscriptionTitle">编辑代理订阅</h2><button class="modal-x" onclick="closeProxySubscription()" aria-label="关闭">×</button></div>
+    <div class="modal-bd">
+      <p class="hint">支持同时使用多个订阅。订阅地址含访问凭证，仅在服务器保存；修改时留空保留原地址。</p>
+      <label>订阅名称 <input id="proxySubscriptionName" maxlength="40" autocomplete="off"></label>
+      <label>订阅地址 <input id="proxySubscriptionURL" type="password" autocomplete="new-password" placeholder="https://…" style="width:100%"></label>
+      <label>订阅刷新间隔（秒） <input id="proxySubscriptionInterval" type="number" min="300" max="86400" value="3600"></label>
+      <label><input id="proxySubscriptionEnabled" type="checkbox" checked> 将此订阅加入出口组</label>
+      <div id="proxySubscriptionSaveState" role="status"></div>
+    </div>
+    <div class="modal-ft"><button class="sec" onclick="closeProxySubscription()">取消</button><button onclick="saveProxySubscription(this)">保存并应用订阅</button></div>
+  </div>
+</div>
 <div class="modal-mask" id="loginModal">
   <div class="modal" role="dialog" aria-modal="true">
     <div class="modal-hd">
@@ -14661,6 +14797,7 @@ async function setAccountSlot(uid, slotId, el){
 
 async function loadProxySlots(force){
   loadProxyHealth();
+  loadProxySubscriptions();
   // 编辑器有未保存改动时不动它：轮询与「切到设置页」都不该覆盖正在填的内容。
   if(SLOT_BATCH_RUNNING || (SLOTS_DIRTY && !force)) return;
   try{
@@ -14875,6 +15012,7 @@ function renderProxySlots(){
         + '<td style="text-align:center" data-label="绑定账号">' + (s.bound || 0) + '</td>'
         + '<td style="text-align:center;white-space:nowrap" data-label="">'
         +   '<button class="sec mini" onclick="testProxySlot(' + i + ', this)"'+(SLOT_BATCH_RUNNING?' disabled':'')+'>测试</button> '
+        +   '<button class="sec mini" onclick="openProxyNodeModal(' + i + ')"'+(!s.id || s.enabled===false?' disabled':'')+'>更换</button> '
         +   '<button class="danger mini" onclick="removeProxySlot(' + i + ')">删除</button>'
         + '</td></tr>'
       ).join('')
@@ -14958,6 +15096,138 @@ async function testProxySlot(index, btn){
   }finally{
     SLOT_SINGLE_TESTS--;
     if(btn){ btn.disabled = false; btn.textContent = '测试'; }
+  }
+}
+
+let PROXY_SUBSCRIPTIONS=[], PROXY_SUBSCRIPTIONS_LOADING=false, PROXY_SUBSCRIPTION_SAVING=false;
+let PROXY_NODE_SLOT='', PROXY_NODE_DATA=null, PROXY_NODE_BUSY=false;
+function proxyAdminError(error){
+  const code=String(error && error.message || error);
+  const messages={health_check_busy:'健康检查正在运行，请等待结束后重试。',
+    subscription_management_not_configured:'订阅管理尚未在服务器启用。',
+    managed_mihomo_config_required:'服务器订阅配置格式尚未准备好。',
+    public_https_subscription_required:'请输入有效的公网 HTTPS 订阅地址。',
+    subscription_name_invalid:'订阅名称只能包含文字、数字、下划线或短横线，最长 40 个字符。',
+    subscription_interval_or_enabled_invalid:'订阅刷新间隔必须为 300 至 86400 秒。',
+    subscription_apply_failed_rolled_back:'订阅应用失败，已恢复原配置。请检查地址和订阅格式。',
+    subscription_refresh_failed:'订阅刷新失败，请检查服务商状态。',
+    subscription_config_validation_failed:'订阅配置验证失败，原配置保持不变。',
+    at_least_one_subscription_required:'出口组至少需要启用一个订阅。',
+    peer_exit_unknown:'其他槽位出口尚未确认，请先完成健康检查。',
+    measured_candidate_required:'请先完成全量测速，再选择可用节点。',
+    candidate_revalidation_failed:'候选节点复测失败或 IP 已被占用，未执行更换。',
+    enabled_managed_slot_required:'请先启用该槽位并配置健康检查与出口组映射。'};
+  return slotBatchText(messages[code] || code);
+}
+async function loadProxySubscriptions(){
+  if(PROXY_SUBSCRIPTIONS_LOADING || PROXY_SUBSCRIPTION_SAVING) return;
+  PROXY_SUBSCRIPTIONS_LOADING=true;
+  try{
+    const data=await getJSON('/proxy/subscriptions');
+    PROXY_SUBSCRIPTIONS=data.providers || [];
+    document.getElementById('proxySubscriptionsState').textContent=data.available?'':proxyAdminError(data.error || 'subscription_management_not_configured');
+    document.getElementById('proxySubscriptionsList').innerHTML=PROXY_SUBSCRIPTIONS.map((s,i)=>
+      '<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 0;border-bottom:1px solid var(--line)">'
+      +'<b>'+esc(s.name)+'</b><span class="mono">'+esc(s.source)+'</span>'
+      +'<span>'+slotBatchText(s.enabled?'已启用':'已停用')+' · '+Number(s.nodes || 0)+' '+slotBatchText('节点')+'</span>'
+      +'<button class="sec mini" onclick="openProxySubscription('+i+')">'+slotBatchText('编辑')+'</button>'
+      +'<button class="sec mini" onclick="refreshProxySubscription('+i+',this)">'+slotBatchText('刷新订阅')+'</button></div>').join('');
+  }catch(e){ document.getElementById('proxySubscriptionsState').textContent=proxyAdminError(e); }
+  finally{PROXY_SUBSCRIPTIONS_LOADING=false;}
+}
+function openProxySubscription(index){
+  const s=PROXY_SUBSCRIPTIONS[index];
+  const name=document.getElementById('proxySubscriptionName');name.value=s?s.name:'';name.disabled=!!s;
+  document.getElementById('proxySubscriptionURL').value='';
+  document.getElementById('proxySubscriptionInterval').value=s?s.interval:3600;
+  document.getElementById('proxySubscriptionEnabled').checked=s?s.enabled:true;
+  document.getElementById('proxySubscriptionSaveState').textContent=s?s.source:'';
+  document.getElementById('proxySubscriptionModal').classList.add('show');
+  (s?document.getElementById('proxySubscriptionURL'):name).focus();
+}
+function closeProxySubscription(){
+  if(PROXY_SUBSCRIPTION_SAVING) return;
+  document.getElementById('proxySubscriptionURL').value='';
+  document.getElementById('proxySubscriptionModal').classList.remove('show');
+}
+async function saveProxySubscription(btn){
+  if(PROXY_SUBSCRIPTION_SAVING) return;
+  PROXY_SUBSCRIPTION_SAVING=true;btn.disabled=true;
+  const state=document.getElementById('proxySubscriptionSaveState');state.textContent=slotBatchText('正在应用订阅…');
+  try{
+    await postJSON('/proxy/subscriptions/save',{name:document.getElementById('proxySubscriptionName').value.trim(),
+      url:document.getElementById('proxySubscriptionURL').value.trim(),
+      interval:Number(document.getElementById('proxySubscriptionInterval').value),
+      enabled:document.getElementById('proxySubscriptionEnabled').checked});
+    document.getElementById('proxySubscriptionURL').value='';
+    document.getElementById('proxySubscriptionModal').classList.remove('show');
+    toast(slotBatchText('订阅已应用，正在更新节点排名。'),'ok');
+  }catch(e){state.textContent=proxyAdminError(e);}
+  finally{PROXY_SUBSCRIPTION_SAVING=false;btn.disabled=false;await loadProxySubscriptions();await loadProxyHealth();}
+}
+async function refreshProxySubscription(index,btn){
+  const s=PROXY_SUBSCRIPTIONS[index];if(!s||PROXY_SUBSCRIPTION_SAVING)return;
+  PROXY_SUBSCRIPTION_SAVING=true;btn.disabled=true;
+  try{await postJSON('/proxy/subscriptions/refresh',{name:s.name});toast(slotBatchText('订阅已刷新，正在更新节点排名。'),'ok');}
+  catch(e){document.getElementById('proxySubscriptionsState').textContent=proxyAdminError(e);toast(proxyAdminError(e),'bad');}
+  finally{PROXY_SUBSCRIPTION_SAVING=false;btn.disabled=false;await loadProxySubscriptions();}
+}
+async function openProxyNodeModal(index){
+  if(SLOTS_DIRTY || SLOT_BATCH_RUNNING){toast(slotBatchText('请先保存槽位并等待端口测试结束。'),'warn');return;}
+  const s=PROXY_SLOTS[index];if(!s||!s.id)return;
+  PROXY_NODE_SLOT=s.id;PROXY_NODE_DATA=null;
+  document.getElementById('proxyNodeFilter').value='';
+  document.getElementById('proxyNodeModal').classList.add('show');
+  document.getElementById('proxyNodeFilter').focus();
+  document.getElementById('proxyNodeChoices').innerHTML='';
+  await refreshProxyNodeChoices();
+}
+function closeProxyNodeModal(){
+  if(PROXY_NODE_BUSY)return;
+  PROXY_NODE_SLOT='';document.getElementById('proxyNodeModal').classList.remove('show');
+}
+async function refreshProxyNodeChoices(){
+  const id=PROXY_NODE_SLOT;if(!id||PROXY_NODE_BUSY)return;
+  document.getElementById('proxyNodeState').textContent=slotBatchText('正在加载节点…');
+  try{
+    const data=await getJSON('/proxy/health/nodes?id='+encodeURIComponent(id));
+    if(PROXY_NODE_SLOT!==id)return;
+    PROXY_NODE_DATA=data;renderProxyNodeChoices();
+  }catch(e){if(PROXY_NODE_SLOT===id)document.getElementById('proxyNodeState').textContent=proxyAdminError(e);}
+}
+function renderProxyNodeChoices(){
+  const data=PROXY_NODE_DATA;if(!data)return;
+  document.getElementById('proxyNodeState').textContent=PROXY_NODE_SLOT+' · '+data.current+' · '
+    +slotBatchText(data.manual?'手动保留':'自动选择')+(data.scanning?' · '+slotBatchText('全量测速中，请等待完成后更换。'):'');
+  const filter=document.getElementById('proxyNodeFilter').value.trim().toLowerCase();
+  const rows=(data.nodes || []).map((n,i)=>({n,i})).filter(({n})=>[n.node,n.ip,n.country,n.country_code].join(' ').toLowerCase().includes(filter));
+  document.getElementById('proxyNodeChoices').innerHTML=rows.length?'<div class="table-wrap"><table class="data-cards"><thead><tr>'
+    +['节点','出口 IP','延迟','类型','操作'].map(t=>'<th>'+slotBatchText(t)+'</th>').join('')+'</tr></thead><tbody>'
+    +rows.map(({n,i})=>'<tr><td>'+esc(n.node)+'<br><small>'+esc(n.country || n.country_code || '')+'</small></td><td class="mono">'+esc(n.ip)+'</td>'
+      +'<td><span class="slot-latency slot-latency-'+(n.latency_ms<=300?'ok':n.latency_ms<=800?'warn':'bad')+'">'+Number(n.latency_ms)+' ms</span></td>'
+      +'<td>'+esc(ipTypeLabel(n.ip_type) || slotBatchText('未知'))+'</td><td>'
+      +(n.selectable?'<button class="sec mini" onclick="chooseProxyNode('+i+',this)"'+(data.scanning||PROXY_NODE_BUSY?' disabled':'')+'>'+slotBatchText('更换')+'</button>'
+        :esc(slotBatchText(n.unavailable_reason==='exit_occupied'?'已被其他槽位占用':'国家限制')))
+      +'</td></tr>').join('')+'</tbody></table></div>':'<p class="hint">'+slotBatchText('暂无匹配节点，请先完成全量测速。')+'</p>';
+}
+async function chooseProxyNode(index,btn){
+  const n=PROXY_NODE_DATA && PROXY_NODE_DATA.nodes[index];
+  if(!n||!n.selectable||PROXY_NODE_BUSY)return;
+  await changeProxyNode({id:PROXY_NODE_SLOT,node:n.node},btn);
+}
+async function resumeProxySlotAuto(btn){if(PROXY_NODE_SLOT)await changeProxyNode({id:PROXY_NODE_SLOT,automatic:true},btn);}
+async function changeProxyNode(body,btn){
+  if(PROXY_NODE_BUSY)return;
+  PROXY_NODE_BUSY=true;btn.disabled=true;
+  renderProxyNodeChoices();document.getElementById('proxyNodeState').textContent=slotBatchText('正在复测并更换节点…');
+  try{
+    await postJSON('/proxy/health/switch',body);
+    document.getElementById('proxyNodeModal').classList.remove('show');PROXY_NODE_SLOT='';
+    await loadProxySlots(true);toast(slotBatchText(body.automatic?'已恢复自动选择':'节点已更换，故障时仍会自动接管。'),'ok');
+  }catch(e){document.getElementById('proxyNodeState').textContent=proxyAdminError(e);}
+  finally{
+    PROXY_NODE_BUSY=false;btn.disabled=false;
+    if(PROXY_NODE_SLOT){const message=document.getElementById('proxyNodeState').textContent;renderProxyNodeChoices();document.getElementById('proxyNodeState').textContent=message;}
   }
 }
 

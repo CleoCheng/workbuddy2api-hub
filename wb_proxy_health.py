@@ -337,6 +337,84 @@ class Monitor:
                         slots=json.loads(json.dumps(self.rows)), history=self.history[-30:],
                         ranking=copy.deepcopy(self.ranking))
 
+    def node_choices(self, sid):
+        slots = wb_settings.proxy_slots(self.hub.ACCOUNTS_DIR)
+        slot = next((s for s in slots if s['id'] == sid), None)
+        if not slot or sid not in self.cfg['groups']:
+            raise ValueError('slot_selector_not_configured')
+        with self.lock:
+            cfg, rows = copy.deepcopy(self.cfg), copy.deepcopy(self.rows)
+            ranking = copy.deepcopy(self.ranking)
+        live = self._api(cfg, '/proxies')['proxies']
+        group = live.get(cfg['groups'][sid], {})
+        current = group.get('now', '')
+        occupied = {r.get('ip') for k, r in rows.items() if k != sid}
+        used = {live.get(g, {}).get('now') for k, g in cfg['groups'].items() if k != sid}
+        nodes = []
+        for result in ranking.get('ranked', []):
+            if result['node'] not in group.get('all', []) or result['node'] == current:
+                continue
+            reason = ('exit_occupied' if result['ip'] in occupied or result['node'] in used else
+                      'country_restricted' if not cfg['allow_cross_country'] and
+                      (not slot.get('country_code') or result.get('country_code') != slot['country_code']) else '')
+            nodes.append(dict(result, selectable=not reason, unavailable_reason=reason))
+        return dict(id=sid, current=current, manual=bool(rows.get(sid, {}).get('manual')),
+                    nodes=nodes, scanning=ranking.get('scanning', False),
+                    tested_at=ranking.get('completed_at', 0), enabled=cfg['enabled'])
+
+    def manual_switch(self, sid, node=None, automatic=False):
+        if not self.run_lock.acquire(blocking=False):
+            raise ValueError('health_check_busy')
+        try:
+            cfg = copy.deepcopy(self.cfg)
+            slots = wb_settings.proxy_slots(self.hub.ACCOUNTS_DIR)
+            slot = next((s for s in slots if s['id'] == sid), None)
+            if not slot or not slot.get('enabled') or sid not in cfg['groups'] or not cfg['enabled']:
+                raise ValueError('enabled_managed_slot_required')
+            with self.lock:
+                rows = copy.deepcopy(self.rows)
+            if automatic:
+                if sid in rows:
+                    rows[sid]['manual'] = False
+                    self._publish(rows)
+                self._record(sid, 'resume_auto')
+                self.trigger()
+                return dict(ok=True, automatic=True)
+            candidate = next((r for r in self.ranking.get('ranked', []) if r['node'] == node), None)
+            if not candidate:
+                raise ValueError('measured_candidate_required')
+            live = self._api(cfg, '/proxies')['proxies']
+            with ThreadPoolExecutor(max_workers=4) as ex:
+                probes = list(ex.map(lambda s: self._probe(s['url'], cfg['timeout']), slots))
+            for s, probe in zip(slots, probes):
+                if not probe['ok']:
+                    probe = self._probe(s['url'], cfg['timeout'], 1)
+                row = rows.setdefault(s['id'], dict(id=s['id'], url=s['url'], failures=0))
+                row.update(checked_at=time.time())
+                if probe['ok']:
+                    if row.get('ip') and row['ip'] != probe['ip']:
+                        row['generation'] = time.time_ns()
+                    row.update(probe, status='healthy', failures=0, error='', last_success=time.time(),
+                               ip_node=live.get(cfg['groups'].get(s['id']), {}).get('now'))
+                else:
+                    # A failed peer probe cannot prove that its cached IP is still unique.
+                    # Manual selection must not bypass the normal failure threshold
+                    # by blocking a previously reachable peer after a single check.
+                    status = 'unavailable' if row.get('status') in ('unavailable', 'switching') else 'suspect'
+                    row.update(status=status, last_success=0, error='exit_probe_failed')
+                    with self.lock:
+                        self.pending[s['url']] = 'manual_probe_failure'
+                    self.wake.set()
+            self._publish(rows)
+            if not self._ranked_switch(cfg, slot, slots, live, rows, [candidate], 'manual'):
+                self._publish(rows)
+                raise ValueError(rows[sid].get('error') or 'candidate_revalidation_failed')
+            rows[sid]['manual'] = True
+            self._publish(rows)
+            return dict(ok=True, slot=sid, node=rows[sid]['node'], ip=rows[sid]['ip'])
+        finally:
+            self.run_lock.release()
+
     def _publish(self, rows):
         with self.lock:
             self.rows = copy.deepcopy(rows)
@@ -605,7 +683,7 @@ class Monitor:
             slow = row.get('slow_count', 0) >= cfg['slow_failures']
             peers = [rows[s['id']] for s in slots if s['id'] != slot['id']]
             duplicate = any(p.get('ip') == row.get('ip') for p in peers)
-            optimize = not any(r['ip'] == row.get('ip') and r['node'] == row.get('node') for r in desired)
+            optimize = not row.get('manual') and not any(r['ip'] == row.get('ip') and r['node'] == row.get('node') for r in desired)
             if not (bad or slow or duplicate or optimize):
                 continue
             if time.time() - row.get('last_switch', 0) < cfg['cooldown']:
@@ -639,7 +717,9 @@ class Monitor:
                 or cfg['probe_proxy'] in [s['url'] for s in slots]):
             row['error'] = 'dedicated_probe_selector_required'
             return False
-        peers = [rows[s['id']] for s in slots if s['id'] != sid]
+        rejected = {s['id'] for s in slots if proxy_map.get(cfg['groups'].get(s['id']), {}).get('now') == 'REJECT'
+                    and rows[s['id']].get('status') == 'unavailable'}
+        peers = [rows[s['id']] for s in slots if s['id'] != sid and s['id'] not in rejected]
         if any(not p.get('ip') or not p.get('last_success') for p in peers):
             row['error'] = 'peer_exit_unknown'
             return False
@@ -674,7 +754,7 @@ class Monitor:
                         return False
                     for peer in slots:
                         g = cfg['groups'].get(peer['id'])
-                        if peer['id'] != sid and g and rows[peer['id']].get('ip_node') != live.get(g, {}).get('now'):
+                        if peer['id'] != sid and peer['id'] not in rejected and g and rows[peer['id']].get('ip_node') != live.get(g, {}).get('now'):
                             row['error'] = 'peer_exit_unknown'
                             return False
                     row['status'] = 'switching'
@@ -692,7 +772,7 @@ class Monitor:
                         dict(ip=verify['ip'], probed_at=int(stamp), **intel))
                     row.update(verify, status='healthy', failures=0, slow_count=0, node=node,
                                ip_node=node, error='', last_switch=stamp, last_success=stamp,
-                               checked_at=stamp, generation=time.time_ns())
+                               checked_at=stamp, generation=time.time_ns(), manual=reason == 'manual')
                     proxy_map[group]['now'] = node
                     slots[:] = wb_settings.proxy_slots(self.hub.ACCOUNTS_DIR)
                     self._record(sid, reason, old_node=old, node=node, old_ip=slot.get('ip', ''), ip=verify['ip'])
@@ -823,7 +903,9 @@ def manager(hub):
 
 def route(hub, handler, method):
     path = handler.path.split('?')[0]
-    if path not in ('/proxy/health', '/proxy/health/config', '/proxy/health/check'):
+    if path not in ('/proxy/health', '/proxy/health/config', '/proxy/health/check',
+                    '/proxy/health/nodes', '/proxy/health/switch',
+                    '/proxy/subscriptions', '/proxy/subscriptions/save', '/proxy/subscriptions/refresh'):
         return False
     if not handler._panel_ok():
         handler._error(401, 'panel password required')
@@ -832,6 +914,12 @@ def route(hub, handler, method):
     try:
         if method == 'GET' and path == '/proxy/health':
             handler._json(200, mon.view())
+        elif method == 'GET' and path == '/proxy/health/nodes':
+            query = urllib.parse.parse_qs(urllib.parse.urlsplit(handler.path).query)
+            handler._json(200, mon.node_choices(query.get('id', [''])[0]))
+        elif method == 'GET' and path == '/proxy/subscriptions':
+            import wb_proxy_subscriptions
+            handler._json(200, wb_proxy_subscriptions.view(mon))
         elif method == 'POST':
             payload = handler._payload_or_error()
             if payload is None:
@@ -840,6 +928,16 @@ def route(hub, handler, method):
                 mon.configure(payload)
             elif path == '/proxy/health/check':
                 mon.trigger(rescan=payload.get('rescan') is True)
+            elif path == '/proxy/health/switch':
+                result = mon.manual_switch(str(payload.get('id', '')), str(payload.get('node', '')),
+                                           automatic=payload.get('automatic') is True)
+                handler._json(200, result)
+                return True
+            elif path in ('/proxy/subscriptions/save', '/proxy/subscriptions/refresh'):
+                import wb_proxy_subscriptions
+                result = wb_proxy_subscriptions.change(mon, payload, refresh=path.endswith('/refresh'))
+                handler._json(200, result)
+                return True
             else:
                 handler._error(405, 'method not allowed')
                 return True

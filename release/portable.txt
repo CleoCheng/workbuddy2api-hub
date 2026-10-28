@@ -65,6 +65,7 @@ wb_probes.py
 wb_prompt.py
 wb_proxy.py
 wb_proxy_health.py
+wb_proxy_subscriptions.py
 wb_quota_scan.py
 wb_scheduler.py
 wb_settings.py
