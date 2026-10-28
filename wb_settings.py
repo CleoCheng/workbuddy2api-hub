@@ -2917,11 +2917,18 @@ def _clean_slot_entry(entry, fallback_id=None):
         probed_at = int(entry.get("probed_at") or 0)
     except (TypeError, ValueError):
         probed_at = 0
+    try:
+        max_accounts = int(entry.get("max_accounts") or 0)
+        if max_accounts < 0:
+            max_accounts = 0
+    except (TypeError, ValueError):
+        max_accounts = 0
     return {
         "id": slot_id,
         "name": str(entry.get("name") or "").strip(),
         "url": url,
         "enabled": entry.get("enabled", True) is not False,
+        "max_accounts": max_accounts,
         "ip": str(entry.get("ip") or "").strip(),
         "country": str(entry.get("country") or "").strip(),
         "country_code": str(entry.get("country_code") or "").strip().upper(),

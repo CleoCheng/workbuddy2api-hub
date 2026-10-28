@@ -493,6 +493,8 @@ export ANTHROPIC_API_KEY="你在看板设置中添加并绑定的API_Key"
 
 ### Unreleased
 
+- **代理槽账号上限与顺延分配**：代理槽列表新增「账号上限」列，支持针对单个代理槽自定义最大代理账号数（填 0 或留空为不限），或通过表头「统一」按钮及工具栏批量设置所有槽位上限；「一键分配代理」按槽位上限分配，单槽达上限后自动顺延分配至后续可用槽位，并在全部槽位满额时给出未分配提示。 / Proxy slots add an Account Limit column to customize max proxy accounts per slot or in bulk via the toolbar/header "Set all" button (0/empty = unlimited); one-click proxy assignment respects per-slot limits, rolling over excess accounts to available slots and notifying if any remain unassigned when full.
+
 - **代理订阅与手动换节点**：面板新增多订阅管理，可新增、修改地址、启停和刷新，链接凭证仅保存在服务器；槽位可弹窗查看实测节点、延迟与占用情况，复测独立 IP 后更换。手动选择保留至恢复自动或故障/持续高延迟接管，原端口与账号绑定不变。订阅写入默认关闭，需管理员配置受管 Mihomo 文件；校验或应用失败自动回滚。 / Add opt-in multi-subscription editing with secret URLs retained only on the server, validated hot reload/rollback, and per-slot measured node selection with live unique-IP revalidation. Manual choices survive ranking until resumed or health recovery takes over.
 - **可选订阅全量测速排名**：独立探测端口遍历全部订阅节点，按实际 IP 去重，延迟相差可配置范围内住宅优先；为现有槽位选前 N 个出口，周期更新排名，慢节点连续超阈值后验证更快备用并轮换。固定端口、绑定、冷却与故障复核保持生效；面板显示进度和排名。默认关闭。 / Opt-in full subscription scans rank unique measured exit IPs, prefer residential exits only within bounded latency ties and converge existing listeners to the top N. Periodic ranking and sustained-slow failover preserve bindings, cooldowns, verification and rollback, with visible scan progress/results.
 - **代理槽一键测试**：三个并发测试全部已保存端口，逐项更新延迟、进度及通过/失败汇总；失败不阻塞剩余端口，不自动保存编辑、启用槽位或改变账号绑定。补充监听端口与订阅节点数量的区别。 / Test all saved proxy ports with three workers, live latency/progress and a success/failure summary, without changing slot enablement or account bindings.

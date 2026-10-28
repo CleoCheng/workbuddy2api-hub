@@ -27,7 +27,7 @@ let adminBehavior=null;
 dom.installDom({
   confirm: () => true,
   fetch: (url, options) => {
-    if(adminBehavior && (String(url).startsWith('/proxy/subscriptions') || String(url).startsWith('/proxy/health/nodes') || url==='/proxy/health/switch')) return adminBehavior(url,options);
+    if(adminBehavior && (String(url).startsWith('/proxy/subscriptions') || String(url).startsWith('/proxy/health/nodes') || url==='/proxy/health/switch' || url==='/accounts/set')) return adminBehavior(url,options);
     if(url==='/proxy/slots/test' && testBehavior) return testBehavior(JSON.parse(options.body));
     if(url === '/proxy/health/config') healthSaved = JSON.parse(options.body);
     const payload = String(url).startsWith('/proxy/health') ? health : {current: 'intl', accounts: [], slots: serverSlots, data: [],
@@ -53,6 +53,7 @@ const api = new Function(script + `
     testAllProxySlots,
     openProxyNodeModal,chooseProxyNode,closeProxyNodeModal,resumeProxySlotAuto,
     loadProxySubscriptions,openProxySubscription,closeProxySubscription,saveProxySubscription,
+    setSlotMaxAccounts,batchSetSlotMaxAccounts,autoAssignSlots,slotPayload,
     batchFixture: rows => {PROXY_SLOTS=rows;SLOTS_DIRTY=false;},
     manualProbe:(url,row)=>SLOT_MANUAL_PROBES.set(url,row),
     healthDirty: value => { PROXY_HEALTH_DIRTY = value; },
@@ -243,6 +244,79 @@ const api = new Function(script + `
   document.getElementById('proxySubscriptionURL').value='https://private.example/sub?token=secret';
   api.closeProxySubscription();
   assert.equal(document.getElementById('proxySubscriptionURL').value,'','closing the editor clears subscription credentials');
+
+  // Max accounts column & batch limit configuration
+  api.batchFixture([
+    {id: 's1', url: 'http://127.0.0.1:18001', enabled: true, bound: 0, max_accounts: 0},
+    {id: 's2', url: 'http://127.0.0.1:18002', enabled: true, bound: 0, max_accounts: 0},
+  ]);
+  api.setSlotMaxAccounts(0, '5');
+  assert.equal(api.rows()[0].max_accounts, 5, 'setSlotMaxAccounts sets individual slot limit');
+  assert.equal(api.dirty(), true, 'setting max accounts marks dirty');
+  api.setSlotMaxAccounts(0, '0');
+  assert.equal(api.rows()[0].max_accounts, 0, 'setting 0 clears to unlimited');
+  api.setSlotMaxAccounts(0, '-3');
+  assert.equal(api.rows()[0].max_accounts, 0, 'negative limit falls back to 0');
+
+  // Batch setting all slot limits via prompt
+  const origPrompt = global.window.prompt;
+  global.window.prompt = () => '4';
+  api.batchSetSlotMaxAccounts();
+  assert.equal(api.rows()[0].max_accounts, 4, 'batch limit applies to slot 1');
+  assert.equal(api.rows()[1].max_accounts, 4, 'batch limit applies to slot 2');
+  assert.equal(api.slotPayload()[0].max_accounts, 4, 'slotPayload includes max_accounts');
+  global.window.prompt = origPrompt;
+
+  // autoAssignSlots: capacity limits and rollover
+  const assigned = [];
+  const prevAdmin = adminBehavior;
+  adminBehavior = (url, options) => {
+    if (url === '/accounts/set') {
+      assigned.push(JSON.parse(options.body));
+      return Promise.resolve({status: 200, ok: true, json: () => Promise.resolve({ok: true}), text: () => Promise.resolve('{"ok":true}')});
+    }
+    return prevAdmin ? prevAdmin(url, options) : null;
+  };
+
+  // Configure slots: s1 limit 2, s2 limit 1
+  const slotFixtures = [
+    {id: 's1', url: 'http://127.0.0.1:18001', enabled: true, bound: 0, max_accounts: 2},
+    {id: 's2', url: 'http://127.0.0.1:18002', enabled: true, bound: 0, max_accounts: 1},
+  ];
+  serverSlots = slotFixtures;
+  api.batchFixture(slotFixtures);
+  global.window.ACCOUNTS = [
+    {uid: 'u1', enabled: true, proxySlot: ''},
+    {uid: 'u2', enabled: true, proxySlot: ''},
+    {uid: 'u3', enabled: true, proxySlot: ''},
+    {uid: 'u4', enabled: true, proxySlot: ''},
+  ];
+
+  await api.autoAssignSlots();
+  // u1 -> s1 (count 1/2)
+  // u2 -> s2 (count 1/1, full)
+  // u3 -> candidate s1 (count 2/2, full)
+  // u4 -> s2 (full) -> s1 (full) -> cannot assign
+  assert.equal(assigned.length, 3, 'only 3 accounts fit in slots');
+  assert.deepEqual(assigned, [
+    {uid: 'u1', proxySlot: 's1'},
+    {uid: 'u2', proxySlot: 's2'},
+    {uid: 'u3', proxySlot: 's1'},
+  ], 'rollover allocates accounts up to slot caps');
+
+  // Next round: both s1 and s2 are full, so no new assignment can happen
+  assigned.length = 0;
+  api.batchFixture(slotFixtures);
+  global.window.ACCOUNTS = [
+    {uid: 'u1', enabled: true, proxySlot: 's1'},
+    {uid: 'u2', enabled: true, proxySlot: 's2'},
+    {uid: 'u3', enabled: true, proxySlot: 's1'},
+    {uid: 'u4', enabled: true, proxySlot: ''},
+  ];
+  await api.autoAssignSlots();
+  assert.equal(assigned.length, 0, 'no assignment when all slots are full');
+
+  adminBehavior = prevAdmin;
 
   console.log('slot editor assertions passed');
 })().catch(error => { console.error(error); process.exit(1); });

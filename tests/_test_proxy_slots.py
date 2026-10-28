@@ -60,20 +60,23 @@ check("name preserved when present", slots[1]["name"] == "auto", slots[1]["name"
 check("a blank name stays blank", slots[2]["name"] == "", slots[2]["name"])
 check("enabled False preserved", slots[2]["enabled"] is False)
 check("url trimmed", slots[0]["url"] == "http://a:1")
+check("missing max_accounts defaults to 0", slots[0]["max_accounts"] == 0)
 
 print()
 print("[2] set_proxy_slots: assigns ids, dedupes, persists")
 saved = S.set_proxy_slots(
     d,
     [
-        {"name": "one", "url": "http://x:1"},
-        {"name": "two", "url": "http://x:2"},
+        {"name": "one", "url": "http://x:1", "max_accounts": 5},
+        {"name": "two", "url": "http://x:2", "max_accounts": "invalid"},
         {"name": "dup", "url": "http://x:1"},
     ],
 )
 check("two unique slots kept", len(saved) == 2, saved)
 check("ids auto-assigned", all(s["id"].startswith("slot-") for s in saved), saved)
 check("ids unique", len({s["id"] for s in saved}) == 2, saved)
+check("max_accounts positive preserved", saved[0]["max_accounts"] == 5, saved[0]["max_accounts"])
+check("max_accounts invalid falls back to 0", saved[1]["max_accounts"] == 0, saved[1]["max_accounts"])
 again = S.proxy_slots(d)
 check(
     "persisted and reloaded",
@@ -81,6 +84,7 @@ check(
     again,
 )
 check("names preserved", [s["name"] for s in again] == ["one", "two"], again)
+check("max_accounts persisted and reloaded", again[0]["max_accounts"] == 5, again[0])
 
 print()
 print("[3] new ids never collide with existing ones")

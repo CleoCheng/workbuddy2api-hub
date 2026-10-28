@@ -2816,6 +2816,19 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     '账号 (昵称 / UID)': 'Account (nickname / UID)',
     '账号 Token 自动保活与凭证常驻 (每日 22:00 集中巡检)': 'Automatic account token keep-alive and persistent credentials (batch check daily at 22:00)',
     '账号不存在': 'Account does not exist',
+    '账号上限': 'Account limit',
+    '统一': 'Set all',
+    '统一设置上限': 'Set all slot limits',
+    '统一设置所有代理槽最多代理的账号数量': 'Set max accounts for all proxy slots',
+    '设置所有代理槽最多代理的账号数量（留空或填 0 表示不限）：': 'Set max accounts for all proxy slots (empty or 0 = unlimited):',
+    '当前还没有代理槽': 'No proxy slots configured yet',
+    '已将所有代理槽账号上限设为 ': 'Max accounts for all proxy slots set to ',
+    '，记得点「保存槽位」': ', remember to click Save slots',
+    '已将所有代理槽账号上限设为不限，记得点「保存槽位」': 'Max accounts for all proxy slots set to unlimited. Remember to click Save slots',
+    '最多代理的账号数量（填 0 或留空表示不限）': 'Max accounts to proxy (0 or empty = unlimited)',
+    '「账号上限」设置单个代理槽最多代理的账号数量（填 0 或留空为不限），可在表头点击「统一」批量设置；一键分配代理时超出上限的账号将顺延分配至后续可用槽位。': 'Account limit sets the maximum accounts a single proxy slot may proxy (0 or empty = unlimited); click "Set all" in the header to configure in bulk. During auto-assign, accounts exceeding the limit roll over to subsequent available slots.',
+    '所有启用的代理槽均已达账号上限，无法分配': 'All enabled proxy slots have reached their account limit; cannot assign',
+    ' 个账号因槽位达上限未分配': ' accounts unassigned due to slot limits',
     '账号代理槽': 'Account proxy slots',
     '账号余额低于该值时不再接单，避免余额被用尽后触发上游的短信提醒。填 0 表示关闭。': 'An account stops taking orders once its balance drops below this, so the balance is never drained enough to trigger the upstream SMS alert. 0 turns it off.',
     '账号凭证刷新成功': 'Account credentials refreshed',
@@ -3660,6 +3673,19 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     "账号 (昵称 / UID)": "帳號 (暱稱 / UID)",
     "账号 Token 自动保活与凭证常驻 (每日 22:00 集中巡检)": "帳號 Token 自動保活與憑證常駐 (每日 22:00 集中巡檢)",
     "账号不存在": "帳號不存在",
+    "账号上限": "帳號上限",
+    "统一": "統一",
+    "统一设置上限": "統一設定上限",
+    "统一设置所有代理槽最多代理的账号数量": "統一設定所有代理槽最多代理的帳號數量",
+    "设置所有代理槽最多代理的账号数量（留空或填 0 表示不限）：": "設定所有代理槽最多代理的帳號數量（留空或填 0 表示不限）：",
+    "当前还没有代理槽": "目前尚無代理槽",
+    "已将所有代理槽账号上限设为 ": "已將所有代理槽帳號上限設為 ",
+    "，记得点「保存槽位」": "，記得點「儲存槽位」",
+    "已将所有代理槽账号上限设为不限，记得点「保存槽位」": "已將所有代理槽帳號上限設為不限，記得點「儲存槽位」",
+    "最多代理的账号数量（填 0 或留空表示不限）": "最多代理的帳號數量（填 0 或留空表示不限）",
+    "「账号上限」设置单个代理槽最多代理的账号数量（填 0 或留空为不限），可在表头点击「统一」批量设置；一键分配代理时超出上限的账号将顺延分配至后续可用槽位。": "「帳號上限」設定單個代理槽最多代理的帳號數量（填 0 或留空為不限），可在表頭點擊「統一」批次設定；一鍵分配代理時超出上限的帳號將順延分配至後續可用槽位。",
+    "所有启用的代理槽均已达账号上限，无法分配": "所有啟用的代理槽均已達帳號上限，無法分配",
+    " 个账号因槽位达上限未分配": " 個帳號因槽位達上限未分配",
     "账号余额低于该值时不再接单，避免余额被用尽后触发上游的短信提醒。填 0 表示关闭。": "帳號餘額低於該值時不再接單，避免餘額被用盡後觸發上游的簡訊提醒。填 0 表示關閉。",
     "账号凭证刷新成功": "帳號憑證重新整理成功",
     "账号列表是空的": "帳號列表是空的",
@@ -5241,6 +5267,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="sec" onclick="discoverProxySlots(this)">自动发现 mihomo 端口</button>
           <button class="sec" id="slotBatchTestButton" onclick="testAllProxySlots(this)">一键测试全部槽位</button>
+          <button class="sec" onclick="batchSetSlotMaxAccounts()">统一设置上限</button>
           <button class="sec" onclick="addProxySlotRow()">+ 添加槽位</button>
           <button onclick="saveProxySlots(this)">保存槽位</button>
         </div>
@@ -7889,8 +7916,8 @@ const SORT_COL_KINDS = {
                      'num', 'num', 'num', 'num', 'num'],
   accounts:         ['text', 'text', 'text', null, 'num', 'num', 'num', 'num', null],
   // 名称 / 代理地址是 <input>（textContent 恒为空串，按它排等于没排）、启用是复选框、
-  // 操作是按钮列——登记成 null，别让表头挂上一个点了没反应的箭头。
-  slotList:         [null, null, 'text', null, 'num', null],
+  // 账号上限是 <input>、操作是按钮列——登记成 null，别让表头挂上一个点了没反应的箭头。
+  slotList:         [null, null, 'text', null, null, 'num', null, null],
   disabledList:     ['text', 'text', 'text', 'text', 'text', 'text'],
 };
 /* 表体开头有几行是汇总行、不是数据行：矩阵面板的「全部模型合计」钉在表体第一行，
@@ -14931,6 +14958,7 @@ function slotPayload(){
   return PROXY_SLOTS.map(s => ({
     id: s.id || '', name: s.name || '', url: (s.url || '').trim(),
     enabled: s.enabled !== false,
+    max_accounts: Math.max(0, parseInt(s.max_accounts, 10) || 0),
     ip: s.ip || '', country: s.country || '', country_code: s.country_code || '',
     ip_type: s.ip_type || '', isp: s.isp || '', asn: s.asn || '',
     probed_at: s.probed_at || 0,
@@ -14999,6 +15027,7 @@ function renderProxySlots(){
     + '<th style="width:110px">延迟</th>'
     + '<th style="width:90px;text-align:center">启用</th>'
     + '<th style="width:90px;text-align:center">绑定账号</th>'
+    + '<th style="width:115px;text-align:center">账号上限 <button class="sec mini" type="button" onclick="batchSetSlotMaxAccounts(event)" title="统一设置所有代理槽最多代理的账号数量" style="font-size:11px;padding:0 5px;line-height:18px;vertical-align:middle;font-weight:normal">统一</button></th>'
     + '<th style="width:190px;text-align:center">操作</th>'
     + '</tr></thead><tbody>'
     + PROXY_SLOTS.map((s, i) =>
@@ -15010,6 +15039,7 @@ function renderProxySlots(){
         + '<td style="text-align:center" data-label="启用"><input type="checkbox" ' + (s.enabled === false ? '' : 'checked')
         +   ' onchange="PROXY_SLOTS[' + i + '].enabled=this.checked; markSlotsDirty(); refreshProxySlotLatencies()"></td>'
         + '<td style="text-align:center" data-label="绑定账号">' + (s.bound || 0) + '</td>'
+        + '<td style="text-align:center" data-label="账号上限"><input type="number" min="0" value="' + (s.max_accounts > 0 ? s.max_accounts : '') + '" placeholder="不限" title="最多代理的账号数量（填 0 或留空表示不限）" oninput="setSlotMaxAccounts(' + i + ', this.value)" class="slot-input" style="width:75px;text-align:center"></td>'
         + '<td style="text-align:center;white-space:nowrap" data-label="">'
         +   '<button class="sec mini" onclick="testProxySlot(' + i + ', this)"'+(SLOT_BATCH_RUNNING?' disabled':'')+'>测试</button> '
         +   '<button class="sec mini" onclick="openProxyNodeModal(' + i + ')"'+(!s.id || s.enabled===false?' disabled':'')+'>更换</button> '
@@ -15018,14 +15048,45 @@ function renderProxySlots(){
       ).join('')
     + '</tbody></table></div>'
     + '<div class="legend slot-latency-legend"><span class="slot-latency slot-latency-ok">≤300 ms</span><span class="slot-latency slot-latency-warn">301–800 ms</span><span class="slot-latency slot-latency-bad">&gt;800 ms / 不可用</span><span>延迟为代理 HTTPS 探测耗时，不代表模型响应速度；悬停查看探测时间。</span></div>'
-    + '<div class="legend"><span>「绑定账号」只统计已启用账号；停用账号会自动释放槽位，重新启用后需重新绑定。在网关页账号表的「出口」下拉中调整绑定。名称留空时按出口自动显示「国家 类型」，点「测试」会补全出口信息并据此命名。</span></div>';
+    + '<div class="legend"><span>「绑定账号」只统计已启用账号；停用账号会自动释放槽位，重新启用后需重新绑定。在网关页账号表的「出口」下拉中调整绑定。名称留空时按出口自动显示「国家 类型」，点「测试」会补全出口信息并据此命名。</span>'
+    + ' <span>「账号上限」设置单个代理槽最多代理的账号数量（填 0 或留空为不限），可在表头点击「统一」批量设置；一键分配代理时超出上限的账号将顺延分配至后续可用槽位。</span></div>';
   applyTableSort('slotList');
+}
+
+function setSlotMaxAccounts(index, val){
+  const s = PROXY_SLOTS[index];
+  if(!s) return;
+  const n = parseInt(val, 10);
+  s.max_accounts = (!isNaN(n) && n > 0) ? n : 0;
+  markSlotsDirty();
+}
+
+function batchSetSlotMaxAccounts(e){
+  if(e && e.stopPropagation) e.stopPropagation();
+  if(!PROXY_SLOTS.length){
+    toast('当前还没有代理槽', 'warn');
+    return;
+  }
+  const promptFn = window.prompt || (typeof prompt === 'function' ? prompt : null);
+  const input = promptFn ? promptFn('设置所有代理槽最多代理的账号数量（留空或填 0 表示不限）：', '') : null;
+  if(input === null) return;
+  const val = input.trim();
+  const n = parseInt(val, 10);
+  const max = (!isNaN(n) && n > 0) ? n : 0;
+  PROXY_SLOTS.forEach(s => { s.max_accounts = max; });
+  markSlotsDirty();
+  renderProxySlots();
+  if(max > 0){
+    toast('已将所有代理槽账号上限设为 ' + max + '，记得点「保存槽位」', 'ok');
+  }else{
+    toast('已将所有代理槽账号上限设为不限，记得点「保存槽位」', 'ok');
+  }
 }
 
 function addProxySlotRow(){
   SLOTS_DIRTY = true;
   // 名称留空：探测到出口后按「国家 类型」自动命名，填过就按填的显示。
-  PROXY_SLOTS.push({id: '', name: '', url: '', enabled: true, bound: 0});
+  PROXY_SLOTS.push({id: '', name: '', url: '', enabled: true, bound: 0, max_accounts: 0});
   renderProxySlots();
 }
 
@@ -15332,7 +15393,7 @@ function importDiscovered(){
     // 标签由 country/ip_type 每次现算，所以出口换了名字跟着换；写进 name 就成了
     // 用户名称，会被 slot_label() 永久优先，出口变了也还显示旧的国家。
     PROXY_SLOTS.push({
-      id: '', name: '', url: c.url, enabled: true, bound: 0,
+      id: '', name: '', url: c.url, enabled: true, bound: 0, max_accounts: 0,
       ip: c.exit_ip || '', country: c.country || '', country_code: c.country_code || '',
       ip_type: c.ip_type || '', isp: c.isp || '', asn: c.asn || '',
       probed_at: Math.floor(Date.now() / 1000),
@@ -15348,17 +15409,60 @@ async function autoAssignSlots(){
   // bound keeps its slot, so this is not a rebalancer.
   const unbound = (window.ACCOUNTS || []).filter(a => a.enabled && !a.proxySlot);
   if(!unbound.length){ toast('所有已启用账号都已绑定代理出口', 'ok'); return; }
-  const slots = PROXY_SLOTS.filter(s => s.enabled !== false);
+  const slots = PROXY_SLOTS.filter(s => s.enabled !== false && s.id);
   if(!slots.length){ toast('没有启用的代理槽，请先在「设置 → 账号代理槽」添加并保存', 'warn'); return; }
-  let i = 0;
+
+  // Count currently bound enabled accounts per slot
+  const currentCounts = {};
+  (window.ACCOUNTS || []).forEach(a => {
+    if(a.enabled && a.proxySlot){
+      currentCounts[a.proxySlot] = (currentCounts[a.proxySlot] || 0) + 1;
+    }
+  });
+
+  let slotIdx = 0;
+  const toAssign = [];
   for(const a of unbound){
-    const slot = slots[i % slots.length];
-    i++;
-    try{ await postJSON('/accounts/set', {uid: a.uid, proxySlot: slot.id}); }catch(e){}
+    let foundSlot = null;
+    for(let step = 0; step < slots.length; step++){
+      const candidate = slots[(slotIdx + step) % slots.length];
+      const maxAcc = candidate.max_accounts || 0;
+      const curBound = currentCounts[candidate.id] || 0;
+      if(maxAcc <= 0 || curBound < maxAcc){
+        foundSlot = candidate;
+        slotIdx = (slotIdx + step + 1) % slots.length;
+        break;
+      }
+    }
+    if(!foundSlot){
+      // All enabled slots have reached their capacity limit
+      break;
+    }
+    currentCounts[foundSlot.id] = (currentCounts[foundSlot.id] || 0) + 1;
+    toAssign.push({uid: a.uid, slotId: foundSlot.id});
+  }
+
+  if(!toAssign.length){
+    toast('所有启用的代理槽均已达账号上限，无法分配', 'warn');
+    return;
+  }
+
+  let assignedCount = 0;
+  for(const item of toAssign){
+    try{
+      await postJSON('/accounts/set', {uid: item.uid, proxySlot: item.slotId});
+      assignedCount++;
+    }catch(e){}
   }
   await loadAccounts();
   await loadProxySlots();
-  toast('已为 ' + unbound.length + ' 个未绑定账号分配代理出口', 'ok');
+
+  const unassignedCount = unbound.length - assignedCount;
+  if(unassignedCount > 0){
+    toast('已为 ' + assignedCount + ' 个未绑定账号分配代理出口，' + unassignedCount + ' 个账号因槽位达上限未分配', 'warn');
+  }else{
+    toast('已为 ' + assignedCount + ' 个未绑定账号分配代理出口', 'ok');
+  }
 }
 
 /* 智能体配置只在「浏览器和网关进程同一台机器」时成立（issue #246）：服务端 /
