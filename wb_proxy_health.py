@@ -12,6 +12,7 @@ import ipaddress
 import json
 import os
 import random
+import re
 import socket
 import ssl
 import threading
@@ -35,6 +36,21 @@ DEFAULTS = dict(enabled=False, interval=90, failures=3, cooldown=600,
 CHECK_URLS = ('https://api.ipify.org', 'https://checkip.amazonaws.com')
 _managers = {}
 _lock = threading.Lock()
+
+
+def extract_group_tag(name_or_node):
+    """Extract subscription group tag/code, e.g. '[B]' from '[B] 香港 01' or 'subscription-b'."""
+    if not name_or_node:
+        return ""
+    s = str(name_or_node).strip()
+    m = re.match(r"^(\[[^\]]+\]|\([^\)]+\)|【[^】]+】)", s)
+    if m:
+        inner = m.group(1)[1:-1].strip()
+        return f"[{inner}]" if inner else ""
+    p_match = re.search(r"(?:subscription|sub)[-_ ]?([a-zA-Z0-9]+)", s, re.IGNORECASE)
+    if p_match:
+        return f"[{p_match.group(1).upper()}]"
+    return ""
 
 
 def config(accounts_dir):
@@ -768,8 +784,9 @@ class Monitor:
                         continue
                     stamp = time.time()
                     intel = {k: candidate.get(k, '') for k in wb_ipintel.FIELDS}
+                    group_tag = extract_group_tag(node)
                     wb_settings.update_proxy_slot(self.hub.ACCOUNTS_DIR, sid,
-                        dict(ip=verify['ip'], probed_at=int(stamp), **intel))
+                        dict(ip=verify['ip'], probed_at=int(stamp), group=group_tag, **intel))
                     row.update(verify, status='healthy', failures=0, slow_count=0, node=node,
                                ip_node=node, error='', last_switch=stamp, last_success=stamp,
                                checked_at=stamp, generation=time.time_ns(), manual=reason == 'manual')
@@ -862,8 +879,9 @@ class Monitor:
                         row['status'] = 'unavailable'
                         continue
                     stamp = time.time()
+                    group_tag = extract_group_tag(node)
                     wb_settings.update_proxy_slot(self.hub.ACCOUNTS_DIR, sid,
-                          dict(ip=verify['ip'], probed_at=int(stamp), **intel))
+                          dict(ip=verify['ip'], probed_at=int(stamp), group=group_tag, **intel))
                     row.update(verify, status='healthy', failures=0, node=node, error='',
                                last_switch=stamp, last_success=stamp, ip_node=node,
                                generation=time.time_ns())

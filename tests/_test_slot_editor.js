@@ -54,6 +54,7 @@ const api = new Function(script + `
     openProxyNodeModal,chooseProxyNode,closeProxyNodeModal,resumeProxySlotAuto,
     loadProxySubscriptions,openProxySubscription,closeProxySubscription,saveProxySubscription,
     setSlotMaxAccounts,batchSetSlotMaxAccounts,autoAssignSlots,slotPayload,
+    slotSelectHtml,slotExitHtml,autoSlotName,slotGroupTag,
     batchFixture: rows => {PROXY_SLOTS=rows;SLOTS_DIRTY=false;},
     manualProbe:(url,row)=>SLOT_MANUAL_PROBES.set(url,row),
     healthDirty: value => { PROXY_HEALTH_DIRTY = value; },
@@ -317,6 +318,20 @@ const api = new Function(script + `
   assert.equal(assigned.length, 0, 'no assignment when all slots are full');
 
   adminBehavior = prevAdmin;
+
+  // Account table exit dropdown & IP display
+  api.batchFixture([
+    {id: 'slot-b', name: '', url: 'http://127.0.0.1:18001', enabled: true, ip: '38.58.56.34', country: '美国', ip_type: 'residential', group: '[B]'},
+  ]);
+  const acctHtml = api.slotSelectHtml({uid: 'u-ip-test', proxySlot: 'slot-b'});
+  assert.ok(acctHtml.includes('38.58.56.34'), 'slotSelectHtml displays exit IP in cell');
+  assert.ok(acctHtml.includes('美国 住宅 [B] (38.58.56.34)'), 'slotSelectHtml option displays label with group and IP');
+
+  // Proxy slot exit column & auto name with subscription group
+  const exitHtml = api.slotExitHtml(api.rows()[0]);
+  assert.ok(exitHtml.includes('38.58.56.34'), 'slotExitHtml displays IP');
+  assert.ok(exitHtml.includes('[B]'), 'slotExitHtml displays subscription group badge');
+  assert.equal(api.autoSlotName(api.rows()[0]), '美国 住宅 [B]', 'autoSlotName includes subscription group');
 
   console.log('slot editor assertions passed');
 })().catch(error => { console.error(error); process.exit(1); });

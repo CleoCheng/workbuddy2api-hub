@@ -6386,12 +6386,32 @@ def discover_proxy_slots():
     return out
 
 
+def extract_group_tag(name_or_node):
+    """Extract subscription group tag/code, e.g. '[B]' from '[B] 香港 01' or 'subscription-b'."""
+    if not name_or_node:
+        return ""
+    s = str(name_or_node).strip()
+    m = re.match(r"^(\[[^\]]+\]|\([^\)]+\)|【[^】]+】)", s)
+    if m:
+        inner = m.group(1)[1:-1].strip()
+        return f"[{inner}]" if inner else ""
+    p_match = re.search(r"(?:subscription|sub)[-_ ]?([a-zA-Z0-9]+)", s, re.IGNORECASE)
+    if p_match:
+        return f"[{p_match.group(1).upper()}]"
+    return ""
+
+
 def slot_label(entry):
     """What to call a slot: the operator's name, else its exit, else its id."""
     name = str((entry or {}).get("name") or "").strip()
     if name:
         return name
     auto = wb_ipintel.slot_name(entry.get("country"), entry.get("ip_type"))
+    group = str((entry or {}).get("group") or "").strip()
+    if not group and entry.get("node"):
+        group = extract_group_tag(entry.get("node"))
+    if group:
+        auto = (auto + " " + group) if auto else group
     return auto or str((entry or {}).get("id") or "")
 
 
@@ -6403,11 +6423,27 @@ def proxy_slots_view():
             slot_id = account.proxy_slot
             if slot_id and account.enabled:
                 counts[slot_id] = counts.get(slot_id, 0) + 1
+    health_rows = {}
+    try:
+        key = os.path.abspath(ACCOUNTS_DIR) if ACCOUNTS_DIR else ""
+        mon = wb_proxy_health._managers.get(key)
+        if mon:
+            with mon.lock:
+                health_rows = dict(mon.rows)
+    except Exception:
+        health_rows = {}
     out = []
     for entry in wb_settings.proxy_slots(ACCOUNTS_DIR):
         item = dict(entry)
         item["bound"] = counts.get(entry["id"], 0)
-        item["label"] = slot_label(entry)
+        hrow = health_rows.get(entry["id"]) or {}
+        node = hrow.get("ip_node") or hrow.get("node") or ""
+        if node:
+            item["node"] = node
+            tag = extract_group_tag(node)
+            if tag and not item.get("group"):
+                item["group"] = tag
+        item["label"] = slot_label(item)
         out.append(item)
     return out
 

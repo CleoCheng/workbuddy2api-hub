@@ -4119,11 +4119,37 @@ class AccountPool(object):
                 self.accounts[self.accounts.index(existing)] = account
             else:
                 self.accounts.append(account)
+            if not account.proxy_slot and not account.proxy_legacy:
+                account.proxy_slot = self._pick_default_proxy_slot()
             account.save(self.dir)
             self.apply_proxy_slots()
             self.apply_reserve_credits()
             self.apply_expiring_window()
             return account
+
+    def _pick_default_proxy_slot(self):
+        """Randomly pick an eligible proxy slot respecting capacity limits."""
+        try:
+            slots = [s for s in wb_settings.proxy_slots(self.dir)
+                     if s.get("enabled") is not False and s.get("id")]
+            if not slots:
+                return ""
+            counts = {}
+            for a in self.accounts:
+                if getattr(a, "enabled", True) and getattr(a, "proxy_slot", None):
+                    counts[a.proxy_slot] = counts.get(a.proxy_slot, 0) + 1
+            eligible = []
+            for s in slots:
+                max_acc = s.get("max_accounts") or 0
+                cur = counts.get(s["id"], 0)
+                if max_acc <= 0 or cur < max_acc:
+                    eligible.append(s["id"])
+            if not eligible:
+                return ""
+            import random
+            return random.choice(eligible)
+        except Exception:
+            return ""
 
     def remove(self, uid):
         with self._lock:

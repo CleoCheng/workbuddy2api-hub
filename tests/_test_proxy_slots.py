@@ -67,7 +67,7 @@ print("[2] set_proxy_slots: assigns ids, dedupes, persists")
 saved = S.set_proxy_slots(
     d,
     [
-        {"name": "one", "url": "http://x:1", "max_accounts": 5},
+        {"name": "one", "url": "http://x:1", "max_accounts": 5, "group": "[B]"},
         {"name": "two", "url": "http://x:2", "max_accounts": "invalid"},
         {"name": "dup", "url": "http://x:1"},
     ],
@@ -77,6 +77,7 @@ check("ids auto-assigned", all(s["id"].startswith("slot-") for s in saved), save
 check("ids unique", len({s["id"] for s in saved}) == 2, saved)
 check("max_accounts positive preserved", saved[0]["max_accounts"] == 5, saved[0]["max_accounts"])
 check("max_accounts invalid falls back to 0", saved[1]["max_accounts"] == 0, saved[1]["max_accounts"])
+check("group preserved", saved[0]["group"] == "[B]", saved[0]["group"])
 again = S.proxy_slots(d)
 check(
     "persisted and reloaded",
@@ -85,6 +86,7 @@ check(
 )
 check("names preserved", [s["name"] for s in again] == ["one", "two"], again)
 check("max_accounts persisted and reloaded", again[0]["max_accounts"] == 5, again[0])
+check("group persisted and reloaded", again[0]["group"] == "[B]", again[0])
 
 print()
 print("[3] new ids never collide with existing ones")
@@ -304,6 +306,28 @@ check("legacy kept for fallback", fresh.proxy_legacy == "http://fallback:9", fre
 S.set_proxy_slots(d4, [{"id": "slot-1", "name": "one", "url": "http://slot:1", "enabled": False}])
 pool4.apply_proxy_slots()
 check("disabled slot falls back to legacy", fresh.proxy == "http://fallback:9", fresh.proxy)
+
+print()
+print("[13] new account automatically assigned an eligible slot")
+d_auto = os.path.join(_TMP.name, "auto_slot")
+S.set_proxy_slots(d_auto, [
+    {"id": "slot-1", "name": "one", "url": "http://slot:1", "max_accounts": 1},
+    {"id": "slot-2", "name": "two", "url": "http://slot:2", "max_accounts": 1},
+])
+p_auto = A.AccountPool(d_auto, log=lambda m: None)
+a1 = A.Account({"uid": "u-auto-1", "domain": "www.workbuddy.ai", "realm": "intl", "accessToken": "tok1"})
+p_auto.add(a1)
+check("new account gets a proxy slot", a1.proxy_slot in ("slot-1", "slot-2"), a1.proxy_slot)
+first_slot = a1.proxy_slot
+second_slot = "slot-2" if first_slot == "slot-1" else "slot-1"
+
+a2 = A.Account({"uid": "u-auto-2", "domain": "www.workbuddy.ai", "realm": "intl", "accessToken": "tok2"})
+p_auto.add(a2)
+check("second account gets the other slot when first is full", a2.proxy_slot == second_slot, a2.proxy_slot)
+
+a3 = A.Account({"uid": "u-auto-3", "domain": "www.workbuddy.ai", "realm": "intl", "accessToken": "tok3"})
+p_auto.add(a3)
+check("third account remains unassigned when both slots are at limit", a3.proxy_slot == "", a3.proxy_slot)
 
 print()
 print("PASS=%d FAIL=%d" % (PASS, FAIL))

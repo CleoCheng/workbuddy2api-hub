@@ -2929,6 +2929,7 @@ def _clean_slot_entry(entry, fallback_id=None):
         "url": url,
         "enabled": entry.get("enabled", True) is not False,
         "max_accounts": max_accounts,
+        "group": str(entry.get("group") or "").strip(),
         "ip": str(entry.get("ip") or "").strip(),
         "country": str(entry.get("country") or "").strip(),
         "country_code": str(entry.get("country_code") or "").strip().upper(),

@@ -2829,6 +2829,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     '「账号上限」设置单个代理槽最多代理的账号数量（填 0 或留空为不限），可在表头点击「统一」批量设置；一键分配代理时超出上限的账号将顺延分配至后续可用槽位。': 'Account limit sets the maximum accounts a single proxy slot may proxy (0 or empty = unlimited); click "Set all" in the header to configure in bulk. During auto-assign, accounts exceeding the limit roll over to subsequent available slots.',
     '所有启用的代理槽均已达账号上限，无法分配': 'All enabled proxy slots have reached their account limit; cannot assign',
     ' 个账号因槽位达上限未分配': ' accounts unassigned due to slot limits',
+    '（已自动分配代理出口）': ' (proxy exit auto-assigned)',
     '账号代理槽': 'Account proxy slots',
     '账号余额低于该值时不再接单，避免余额被用尽后触发上游的短信提醒。填 0 表示关闭。': 'An account stops taking orders once its balance drops below this, so the balance is never drained enough to trigger the upstream SMS alert. 0 turns it off.',
     '账号凭证刷新成功': 'Account credentials refreshed',
@@ -3686,6 +3687,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     "「账号上限」设置单个代理槽最多代理的账号数量（填 0 或留空为不限），可在表头点击「统一」批量设置；一键分配代理时超出上限的账号将顺延分配至后续可用槽位。": "「帳號上限」設定單個代理槽最多代理的帳號數量（填 0 或留空為不限），可在表頭點擊「統一」批次設定；一鍵分配代理時超出上限的帳號將順延分配至後續可用槽位。",
     "所有启用的代理槽均已达账号上限，无法分配": "所有啟用的代理槽均已達帳號上限，無法分配",
     " 个账号因槽位达上限未分配": " 個帳號因槽位達上限未分配",
+    "（已自动分配代理出口）": "（已自動分配代理出口）",
     "账号余额低于该值时不再接单，避免余额被用尽后触发上游的短信提醒。填 0 表示关闭。": "帳號餘額低於該值時不再接單，避免餘額被用盡後觸發上游的簡訊提醒。填 0 表示關閉。",
     "账号凭证刷新成功": "帳號憑證重新整理成功",
     "账号列表是空的": "帳號列表是空的",
@@ -6735,10 +6737,11 @@ async function pollLogin(){
     if(statusBox) statusBox.textContent = r.message || r.status;
     if(r.status === "ok"){
       if(s3) s3.className = "step done";
-      if(statusBox) statusBox.textContent = "登录成功：" + (r.account && r.account.nickname) + " 已加入账号池";
+      if(statusBox) statusBox.textContent = "登录成功：" + (r.account && r.account.nickname) + " 已加入账号池" + (r.account && r.account.proxySlot ? "（已自动分配代理出口）" : "");
       if(loginTimer){ clearInterval(loginTimer); loginTimer = null; }
       loginState = null;
       await loadAccounts();
+      await loadProxySlots();
       setTimeout(closeLogin, 1200);
     }else if(r.status === "error" || r.status === "expired" || r.status === "unknown"){
       if(loginTimer){ clearInterval(loginTimer); loginTimer = null; }
@@ -14799,12 +14802,20 @@ function slotSelectHtml(a){
   } else {
     opts.push('<option value=""' + (current ? '' : ' selected') + '>直连</option>');
   }
-  opts.push.apply(opts, PROXY_SLOTS.map(s =>
-    '<option value="' + esc(s.id) + '"' + (s.id === current ? ' selected' : '') + '>'
-    + esc(s.label || s.name || s.id) + (s.enabled === false ? '（停用）' : '') + '</option>'));
+  const boundSlot = PROXY_SLOTS.find(s => s.id === current);
+  opts.push.apply(opts, PROXY_SLOTS.map(s => {
+    let label = esc(s.label || s.name || autoSlotName(s) || s.id);
+    if(s.ip) label += ' (' + esc(s.ip) + ')';
+    if(s.enabled === false) label += '（停用）';
+    return '<option value="' + esc(s.id) + '"' + (s.id === current ? ' selected' : '') + '>'
+      + label + '</option>';
+  }));
   const uidAttr = esc(String(a.uid || '').replace(/[^\w.@-]/g, ''));
+  const ipLine = (boundSlot && boundSlot.ip)
+    ? '<div class="mono" style="font-size:11px;color:var(--dim);margin-top:2px" title="出口 IP: ' + esc(boundSlot.ip) + '">' + esc(boundSlot.ip) + '</div>'
+    : '';
   return '<select class="slot-select" onchange="setAccountSlot(&quot;' + uidAttr + '&quot;, this.value, this)">'
-    + opts.join('') + '</select>';
+    + opts.join('') + '</select>' + ipLine;
 }
 
 async function setAccountSlot(uid, slotId, el){
@@ -14944,13 +14955,30 @@ const IP_TYPE_LABELS = {residential: '住宅', datacenter: '机房'};
 
 function ipTypeLabel(t){ return IP_TYPE_LABELS[t] || ''; }
 
-/* 默认名称：国家 + 类型（如「美国 住宅」）。没有国家就不自动命名——只有
+function slotGroupTag(slot){
+  if(!slot) return '';
+  if(slot.group) return slot.group;
+  const health = typeof SLOT_HEALTH_ROWS !== 'undefined' ? SLOT_HEALTH_ROWS[slot.id] : null;
+  const node = (health && (health.ip_node || health.node)) || '';
+  if(node){
+    const m = node.match(/^(\[[^\]]+\]|\([^\)]+\)|【[^】]+】)/);
+    if(m) return m[1];
+    const pMatch = node.match(/(?:subscription|sub)[-_ ]?([a-zA-Z0-9]+)/i);
+    if(pMatch) return '[' + pMatch[1].toUpperCase() + ']';
+  }
+  return '';
+}
+
+/* 默认名称：国家 + 类型 + 订阅分组（如「美国 住宅 [B]」）。没有国家就不自动命名——只有
    「住宅」两个字区分不了不同槽位，此时回退显示槽位 id。 */
 function autoSlotName(c){
   const where = String((c && c.country) || '').trim();
-  if(!where) return '';
   const kind = ipTypeLabel(c && c.ip_type);
-  return kind ? (where + ' ' + kind) : where;
+  const group = slotGroupTag(c);
+  const base = where ? (kind ? (where + ' ' + kind) : where) : kind;
+  if(base && group) return base + ' ' + group;
+  if(base) return base;
+  return group || '';
 }
 
 /* 保存时要把探测到的出口字段一起送回，否则一次保存就把它们抹掉了。 */
@@ -14959,6 +14987,7 @@ function slotPayload(){
     id: s.id || '', name: s.name || '', url: (s.url || '').trim(),
     enabled: s.enabled !== false,
     max_accounts: Math.max(0, parseInt(s.max_accounts, 10) || 0),
+    group: s.group || slotGroupTag(s) || '',
     ip: s.ip || '', country: s.country || '', country_code: s.country_code || '',
     ip_type: s.ip_type || '', isp: s.isp || '', asn: s.asn || '',
     probed_at: s.probed_at || 0,
@@ -14971,7 +15000,11 @@ function slotExitHtml(s){
   const badge = kind
     ? '<span class="badge ' + (kind === '住宅' ? 's' : '') + '" style="font-size:11px">' + kind + '</span>'
     : '';
-  const where = [s.country ? esc(s.country) : '', badge].filter(Boolean).join(' ');
+  const group = slotGroupTag(s);
+  const groupBadge = group
+    ? '<span class="badge" style="font-size:11px;font-weight:600;opacity:0.9">' + esc(group) + '</span>'
+    : '';
+  const where = [s.country ? esc(s.country) : '', badge, groupBadge].filter(Boolean).join(' ');
   const tip = [s.isp, s.asn].filter(Boolean).join(' · ');
   return '<div class="mono" style="font-size:12px">' + esc(s.ip) + '</div>'
     + '<div style="font-size:12px;color:var(--dim);margin-top:2px"'
@@ -15008,7 +15041,18 @@ function slotLatencyHtml(slot){
 function refreshProxySlotLatencies(){
   document.querySelectorAll('[data-slot-latency-index]').forEach(el=>{
     const s=PROXY_SLOTS[Number(el.dataset.slotLatencyIndex)];
-    if(s) el.innerHTML=slotLatencyHtml(s);
+    if(s){
+      el.innerHTML=slotLatencyHtml(s);
+      const tr = el.closest('tr');
+      if(tr){
+        const exitTd = tr.querySelector('td[data-label="出口"]');
+        if(exitTd) exitTd.innerHTML = slotExitHtml(s);
+        const nameInput = tr.querySelector('td[data-label="名称"] input');
+        if(nameInput && !nameInput.value){
+          nameInput.placeholder = autoSlotName(s) || s.id;
+        }
+      }
+    }
   });
 }
 
@@ -15030,8 +15074,11 @@ function renderProxySlots(){
     + '<th style="width:115px;text-align:center">账号上限 <button class="sec mini" type="button" onclick="batchSetSlotMaxAccounts(event)" title="统一设置所有代理槽最多代理的账号数量" style="font-size:11px;padding:0 5px;line-height:18px;vertical-align:middle;font-weight:normal">统一</button></th>'
     + '<th style="width:190px;text-align:center">操作</th>'
     + '</tr></thead><tbody>'
-    + PROXY_SLOTS.map((s, i) =>
-        '<tr>'
+    + PROXY_SLOTS.map((s, i) => {
+        const tag = slotGroupTag(s);
+        if(tag && !s.group) s.group = tag;
+        s.label = s.name || autoSlotName(s) || s.id;
+        return '<tr>'
         + '<td data-label="名称"><input value="' + esc(s.name || '') + '" placeholder="' + esc(s.label || '') + '" oninput="PROXY_SLOTS[' + i + '].name=this.value; markSlotsDirty()" class="slot-input"></td>'
         + '<td data-label="代理地址"><input value="' + esc(s.url || '') + '" oninput="PROXY_SLOTS[' + i + '].url=this.value; markSlotsDirty(); refreshProxySlotLatencies()" class="slot-input mono"></td>'
         + '<td data-label="出口">' + slotExitHtml(s) + '</td>'
@@ -15044,8 +15091,8 @@ function renderProxySlots(){
         +   '<button class="sec mini" onclick="testProxySlot(' + i + ', this)"'+(SLOT_BATCH_RUNNING?' disabled':'')+'>测试</button> '
         +   '<button class="sec mini" onclick="openProxyNodeModal(' + i + ')"'+(!s.id || s.enabled===false?' disabled':'')+'>更换</button> '
         +   '<button class="danger mini" onclick="removeProxySlot(' + i + ')">删除</button>'
-        + '</td></tr>'
-      ).join('')
+        + '</td></tr>';
+      }).join('')
     + '</tbody></table></div>'
     + '<div class="legend slot-latency-legend"><span class="slot-latency slot-latency-ok">≤300 ms</span><span class="slot-latency slot-latency-warn">301–800 ms</span><span class="slot-latency slot-latency-bad">&gt;800 ms / 不可用</span><span>延迟为代理 HTTPS 探测耗时，不代表模型响应速度；悬停查看探测时间。</span></div>'
     + '<div class="legend"><span>「绑定账号」只统计已启用账号；停用账号会自动释放槽位，重新启用后需重新绑定。在网关页账号表的「出口」下拉中调整绑定。名称留空时按出口自动显示「国家 类型」，点「测试」会补全出口信息并据此命名。</span>'
@@ -15139,7 +15186,7 @@ async function testProxySlot(index, btn){
       // 其他行里还没保存的输入都还在 PROXY_SLOTS 里，重绘不会丢。
       const row = PROXY_SLOTS[index];
       if(row && r.slot){
-        ['ip', 'country', 'country_code', 'ip_type', 'isp', 'asn', 'probed_at'].forEach(k => {
+        ['ip', 'country', 'country_code', 'ip_type', 'isp', 'asn', 'probed_at', 'group'].forEach(k => {
           if(r.slot[k] !== undefined) row[k] = r.slot[k];
         });
         if(r.slot.name) row.name = r.slot.name;
