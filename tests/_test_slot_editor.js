@@ -44,6 +44,8 @@ const api = new Function(script + `
     saveProxySlots,
     loadProxyHealth,
     saveProxyHealth,
+    slotLatencyState,slotLatencyHtml,renderProxySlots,testProxySlot,
+    manualProbe:(url,row)=>SLOT_MANUAL_PROBES.set(url,row),
     healthDirty: value => { PROXY_HEALTH_DIRTY = value; },
     rows: () => PROXY_SLOTS,
     dirty: () => SLOTS_DIRTY,
@@ -117,6 +119,42 @@ const api = new Function(script + `
   health.slots['slot-1'] = {id:'slot-1', node:'<script>bad</script>', status:'healthy', ip:'203.0.113.1'};
   await api.loadProxyHealth();
   assert.ok(!document.getElementById('proxyHealthRows').innerHTML.includes('<script>'));
+
+  // Delay bands include exact boundaries; errors never display an old success.
+  const measured={id:'measured',url:'http://127.0.0.1:17903',enabled:true};
+  const stamp=Date.now()/1000;
+  for(const [ms,tone] of [[0,'ok'],[300,'ok'],[301,'warn'],[800,'warn'],[801,'bad']]){
+    api.manualProbe(measured.url,{status:'healthy',checked_at:stamp,latency_ms:ms});
+    const state=api.slotLatencyState(measured,stamp);
+    assert.equal(state.tone,tone,'delay band for '+ms);
+    assert.equal(state.text,ms+' ms');
+  }
+  for(const [status,tone,text] of [['suspect','warn','连接异常'],['unavailable','bad','不可用'],['switching','warn','切换中']]){
+    api.manualProbe(measured.url,{status,checked_at:stamp,latency_ms:10});
+    assert.equal(api.slotLatencyState(measured,stamp).tone,tone);
+    assert.equal(api.slotLatencyState(measured,stamp).text,text);
+    assert(!api.slotLatencyHtml(measured).includes('10 ms'),'failed probes cannot look healthy');
+  }
+  api.manualProbe(measured.url,{status:'healthy',checked_at:stamp-1000,latency_ms:1});
+  assert.equal(api.slotLatencyState(measured,stamp).text,'已过期');
+  assert.equal(api.slotLatencyState({...measured,enabled:false},stamp).text,'已停用');
+  assert.equal(api.slotLatencyState({...measured,url:'http://127.0.0.1:17904'},stamp).text,'未探测','changed endpoint cannot inherit old latency');
+  for(const value of [null,'12',NaN,Infinity,-1]){
+    api.manualProbe(measured.url,{status:'healthy',checked_at:stamp,latency_ms:value});
+    assert.equal(api.slotLatencyState(measured,stamp).text,'未探测');
+  }
+  // Background health updates can update the latency while preserving dirty edits.
+  const row=api.rows()[0],cell=document.createElement('td');cell.dataset.slotLatencyIndex='0';
+  const originalQuery=document.querySelectorAll;
+  document.querySelectorAll=selector=>selector==='[data-slot-latency-index]'?[cell]:originalQuery.call(document,selector);
+  health.slots[row.id]={id:row.id,url:row.url,status:'healthy',checked_at:stamp,latency_ms:521};
+  await api.loadProxyHealth();
+  assert(cell.innerHTML.includes('slot-latency-warn')&&cell.innerHTML.includes('521 ms'));
+  assert.equal(api.dirty(),true,'latency refresh cannot clear unsaved slot edits');
+  health.slots[row.id].status='unavailable';await api.loadProxyHealth();
+  assert(cell.innerHTML.includes('不可用')&&!cell.innerHTML.includes('521 ms'));
+  api.renderProxySlots();assert(document.getElementById('slotList').innerHTML.includes('data-label="延迟"'));
+  document.querySelectorAll=originalQuery;
 
   console.log('slot editor assertions passed');
 })().catch(error => { console.error(error); process.exit(1); });

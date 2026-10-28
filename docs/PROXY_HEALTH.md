@@ -60,6 +60,19 @@ replays inference requests.
 
 ## 状态、恢复与回滚 / State, recovery and rollback
 
+代理槽列表的「延迟」列复用最近探测结果：≤300 ms 绿色、301–800 ms 黄色、
+>800 ms 红色。连接异常和不可用时不沿用上次成功延迟；超过三个检查周期
+（至少 120 秒）的结果置灰显示已过期，悬停显示探测时间。此值包含代理连接和
+小型 HTTPS 响应耗时，不是 ICMP ping、带宽或模型响应速度。手动测试结果也会
+立即更新；页面重载后由服务器持久化的健康状态恢复显示。
+
+The slot list colors recent HTTPS probe latency green at ≤300 ms, amber at
+301–800 ms and red above 800 ms. Failures replace the old latency with an explicit
+status. Results older than three check intervals (at least 120 seconds) become
+gray/stale; hover to see the probe timestamp. This includes proxy setup and a
+tiny HTTPS response, not ICMP ping, bandwidth or model response time. Manual
+tests update immediately; reloading restores server-persisted monitor state.
+
 私有状态、最多 100 条切换记录与 Qoder 故障信号保存在
 `<accounts-dir>/proxy-health/`。进程重启后恢复故障槽位和出口代次，首次检查重新确认。
 停用功能会恢复原代理调度行为，但不会将 Mihomo 自动切回旧节点。删除/禁用槽位仍
