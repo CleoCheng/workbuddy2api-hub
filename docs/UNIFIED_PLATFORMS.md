@@ -10,16 +10,23 @@ v1.8.0. The upstream runtime remains unmodified and is pinned by a hash manifest
 
 点击左上角网关名称，可在下拉菜单切换 WorkBuddy / Qoder 管理平台。
 顶部「网关、账号、任务与福利、数据看板、运行日志」跟随所选平台，刷新后保留
-平台与页面；「设置、智能体配置」共用统一网关配置。Qoder 福利沿用其账号页，
-是否提供取决于账号版本。切换到 WorkBuddy 会释放内嵌 Qoder 页面及其轮询。
+平台与页面；「设置、智能体配置」共用统一网关配置。网关、账号、任务与福利使用
+原生工作区，默认汇总国内外账号，支持搜索、区域筛选、固定出口绑定、指定模型测试、
+凭证和余额刷新。任务页保留实际新增积分与活动消息，未知余额显示待确认。
+数据看板、运行日志及「更多账号操作」继续使用内嵌页。切换到 WorkBuddy 会释放
+内嵌 Qoder 页面及工作区轮询。
 客户端统一使用同一 `/v1` 入口，实际请求平台由 API Key 的平台权限、模型匹配
 与可用账号决定，面板的平台选择不改变调用策略。
 
 Click the gateway name to select a management platform. Gateway, accounts,
 benefits, analytics and logs follow that platform, including after refresh.
-Settings and agent setup remain shared. Qoder benefits live on its accounts page
-and depend on account region. Switching to WorkBuddy releases the embedded Qoder
-page and its polling. Both platforms still share `/v1`; a key's platform scopes,
+Settings and agent setup remain shared. Gateway, accounts and rewards use a native
+workspace that reads both regions without changing the worker's default region.
+Search accounts, inspect/bind exits, test a chosen model and refresh credentials
+or balances directly. Rewards retain actual credited amounts and messages;
+unknown balances stay unconfirmed. Analytics, logs and advanced account operations
+retain the embedded page. Switching to WorkBuddy releases its page and all workspace
+polling. Both platforms still share `/v1`; a key's platform scopes,
 matching models and ready accounts determine API routing.
 
 1. 在现有面板的「平台管理」中点击「Qoder 国际版授权（支持 Google）」生成带完整

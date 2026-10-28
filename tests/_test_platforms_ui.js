@@ -177,9 +177,78 @@ async function checkEmbeddedNavigation() {
   assert.equal(f.element('qoderViewStatus').textContent,'Qoder: HTTP 503');
 }
 
+async function checkNativeWorkspace() {
+  const elements=new Map(),calls=[],timers=[];
+  function element(id){
+    if(!elements.has(id)) elements.set(id,{value:'',hidden:false,style:{},textContent:'',innerHTML:'',
+      contains:()=>false,querySelectorAll:()=>[],querySelector:()=>null});
+    return elements.get(id);
+  }
+  element('qdFilter').value='all';
+  let bindFails=false,gate;
+  const account={uid:'q-intl',nickname:'<img src=x onerror=alert(1)>',realm:'intl',enabled:true,ready:true,
+    expiresIn:'29 days',credits:null,creditsDegraded:{reason:'unknown'},freeModelCount:4};
+  const ctx=vm.createContext({console,URL,Date,Map,Set,Promise,
+    document:{getElementById:element,activeElement:null},window:{location:{origin:'https://example.test'}},
+    esc:value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;'),
+    getJSON:async url=>{
+      calls.push({url});if(gate)await gate;
+      if(url==='/platforms/status')return {qoder_enabled:true,accounts:[account],slots:[{id:'slot-1',enabled:true,ip:'8.8.8.8'}]};
+      if(url.includes('/accounts?realm=intl'))return {accounts:[account]};
+      if(url.includes('/accounts?realm=cn'))return {accounts:[]};
+      if(url==='/proxy/health')return {slots:{}};
+      if(url.endsWith('/scheduler'))return {enabled:true,checkin_times:'09:00',last_run_time:'test time'};
+      throw new Error(url);
+    },
+    postJSON:async(url,body)=>{
+      calls.push({url,body});
+      if(url.endsWith('/bind')&&bindFails)throw new Error('binding failed');
+      if(url.endsWith('/accounts/test'))return {ok:true,model:body.model,reply:'OK',elapsed_ms:32};
+      if(url.endsWith('/accounts/checkin'))return {results:[{uid:body.uid,ok:true,earned_credit:0,message:'No claimable activity'}]};
+      return {ok:true};
+    },
+    setTimeout:fn=>{timers.push(fn);return timers.length;},clearTimeout:()=>{},
+    currentMainTab:'accounts',isQoderView:()=>true,toast:()=>{},
+  });
+  vm.runInContext(source,ctx);
+  await Promise.all([ctx.loadPlatforms(),ctx.loadPlatforms()]);
+  assert.equal(calls.filter(x=>x.url==='/platforms/status').length,1,'coalesce overlapping refreshes');
+  assert(calls.some(x=>x.url.endsWith('realm=intl'))&&calls.some(x=>x.url.endsWith('realm=cn')),'read both regions without changing worker realm');
+  assert(calls.every(x=>!x.body),'loading accounts must be read-only');
+  assert(element('qoderAccountBindings').innerHTML.includes('&lt;img'),'escape account identity HTML');
+  assert(!element('qoderAccountBindings').innerHTML.includes('<img'),'account data cannot execute as markup');
+  assert(element('qoderAccountBindings').innerHTML.includes('未绑定代理'));
+  assert(element('qoderAccountBindings').innerHTML.includes('待确认'),'unknown credit balance must not become zero');
+  assert.equal(timers.length,1,'one bounded workspace poll');
+  const box=element('qoderAccountBindings');
+  box.querySelectorAll=()=>[{dataset:{modelFor:'q-intl'},value:'custom-model'}];
+  ctx.qdRenderAccounts();assert(box.innerHTML.includes('value="custom-model"'),'refresh preserves edited test model');
+  box.contains=()=>true;ctx.document.activeElement={tagName:'INPUT'};box.innerHTML='editing model';
+  ctx.qdRenderAccounts();assert.equal(box.innerHTML,'editing model','polling must not replace the focused model input');
+  box.contains=()=>false;ctx.document.activeElement=null;ctx.qdRenderAccounts();
+  const btn={dataset:{uid:'q-intl'},closest:()=>({querySelector:()=>({value:'DeepSeek-Flash'})})};
+  await ctx.qdAction(btn,'test');
+  assert.deepEqual(JSON.parse(JSON.stringify(calls.find(x=>x.url.endsWith('/accounts/test')).body)),{uid:'q-intl',model:'DeepSeek-Flash'});
+  assert(box.innerHTML.includes('测试通过')&&box.innerHTML.includes('OK'));
+  await ctx.qdAction(btn,'checkin');
+  assert(box.innerHTML.includes('无新增积分')&&box.innerHTML.includes('No claimable activity'),'successful check-in without credits must retain exact zero-credit outcome');
+  assert(!box.innerHTML.includes('实际新增积分 +'),'never invent credits from HTTP success');
+  bindFails=true;
+  const select={dataset:{uid:'q-intl'},value:'slot-1',blur(){}};
+  await ctx.qdBind(select);
+  assert.equal(select.value,'','failed binding restores prior selection');
+  assert(box.innerHTML.includes('binding failed'));
+  ctx.stopQoderWorkspace();
+  // A response started before leaving the workspace cannot overwrite the next page.
+  let release;gate=new Promise(resolve=>{release=resolve;});
+  const stale=ctx.loadPlatforms();ctx.stopQoderWorkspace();element('platformStatus').textContent='new page';release();
+  await stale;assert.equal(element('platformStatus').textContent,'new page');
+}
+
 (async () => {
   checkManagementSwitcher();
   await checkEmbeddedNavigation();
+  await checkNativeWorkspace();
   const auth = 'https://qoder.com/device/selectAccounts?challenge=test&nonce=n&client_id=c';
   const good = fixture(auth);
   await good.context.startQoderLogin();
