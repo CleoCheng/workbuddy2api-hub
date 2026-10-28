@@ -493,6 +493,7 @@ export ANTHROPIC_API_KEY="你在看板设置中添加并绑定的API_Key"
 
 ### Unreleased
 
+- **代理槽一键测试**：三个并发测试全部已保存端口，逐项更新延迟、进度及通过/失败汇总；失败不阻塞剩余端口，不自动保存编辑、启用槽位或改变账号绑定。补充监听端口与订阅节点数量的区别。 / Test all saved proxy ports with three workers, live latency/progress and a success/failure summary, without changing slot enablement or account bindings.
 - **代理槽延迟与颜色标记**：槽位表直接展示最近 HTTPS 探测耗时，≤300 ms 绿色、301–800 ms 黄色、>800 ms 红色；异常/不可用、未探测和过期状态分别显示，悬停可见探测时间。健康轮询只更新延迟单元格，不覆盖未保存编辑。 / Proxy slots show color-coded HTTPS probe latency with distinct failure, unknown and stale states; background updates preserve unsaved edits.
 - **Qoder 原生管理工作区**：网关概况、国内外账号汇总、搜索筛选、代理槽与健康状态、指定模型测试及结果保留、凭证和余额刷新统一到主面板；任务页显示实际领取结果与零新增积分，未知余额不记为零。数据看板、日志和更多账号操作保留内嵌入口。 / Native Qoder workspace with cross-region accounts, searchable proxy status, explicit model tests and persistent outcomes, credential/balance actions, and accurate zero-credit reward results; analytics, logs and advanced operations retain the embedded panel.
 - **可选代理健康检查与自动切换**：定时轻量探测、请求异常触发复检、连续失败与双地址确认、独立备用探测端口、跨槽位实际出口 IP 去重及切换冷却；无合格备用时暂停该槽位的新请求，保留账号绑定。面板可配置并查看状态与切换记录，默认关闭。详见 [代理健康检查](docs/PROXY_HEALTH.md)。 / Opt-in proxy monitoring and serialized failover with periodic and error-triggered checks, dual-endpoint confirmation, a dedicated spare listener, exit-IP uniqueness, cooldowns and fail-closed dispatch. Configure and inspect status/history in the panel; disabled by default.

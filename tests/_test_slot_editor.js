@@ -21,9 +21,11 @@ let serverSlots = [];
 let health = {config:{enabled:false,interval:90,failures:3,cooldown:600,timeout:5,
                      candidate_limit:12,groups:{}}, slots:{}, history:[]};
 let healthSaved;
+let testBehavior=null;
 dom.installDom({
   confirm: () => true,
   fetch: (url, options) => {
+    if(url==='/proxy/slots/test' && testBehavior) return testBehavior(JSON.parse(options.body));
     if(url === '/proxy/health/config') healthSaved = JSON.parse(options.body);
     const payload = String(url).startsWith('/proxy/health') ? health : {current: 'intl', accounts: [], slots: serverSlots, data: [],
                      results: [], byAccount: []};
@@ -45,6 +47,8 @@ const api = new Function(script + `
     loadProxyHealth,
     saveProxyHealth,
     slotLatencyState,slotLatencyHtml,renderProxySlots,testProxySlot,
+    testAllProxySlots,
+    batchFixture: rows => {PROXY_SLOTS=rows;SLOTS_DIRTY=false;},
     manualProbe:(url,row)=>SLOT_MANUAL_PROBES.set(url,row),
     healthDirty: value => { PROXY_HEALTH_DIRTY = value; },
     rows: () => PROXY_SLOTS,
@@ -155,6 +159,43 @@ const api = new Function(script + `
   assert(cell.innerHTML.includes('不可用')&&!cell.innerHTML.includes('521 ms'));
   api.renderProxySlots();assert(document.getElementById('slotList').innerHTML.includes('data-label="延迟"'));
   document.querySelectorAll=originalQuery;
+
+  // All-port checks use three workers, include disabled ports and keep failures isolated.
+  const batchRows=Array.from({length:7},(_,i)=>({id:'batch-'+i,url:'http://127.0.0.1:'+(18000+i),enabled:i!==6,name:''}));
+  api.batchFixture(batchRows);
+  let inflight=0,peak=0,seen=[],release;
+  const barrier=new Promise(resolve=>{release=resolve;});
+  testBehavior=async body=>{
+    seen.push(body.id);inflight++;peak=Math.max(peak,inflight);await barrier;
+    try{
+      if(body.id==='batch-1') throw new Error('<bad-port>');
+      const payload={ok:body.id!=='batch-2',latency_ms:123,error:'connection failed',slot:{ip:'203.0.113.2'}};
+      return {ok:true,status:200,json:async()=>payload,text:async()=>JSON.stringify(payload)};
+    }finally{inflight--;}
+  };
+  const batchButton={disabled:false};
+  const pending=api.testAllProxySlots(batchButton);
+  await Promise.resolve();await Promise.resolve();
+  assert.equal(peak,3,'batch probes cap concurrency at three');
+  assert.equal(batchButton.disabled,true);
+  await api.testAllProxySlots(batchButton);
+  assert.equal(seen.length,3,'repeated click does not start a second batch');
+  serverSlots=[];await api.loadProxySlots(true);assert.equal(api.rows().length,7,'polls cannot replace the batch snapshot');
+  await api.saveProxySlots(null);assert.equal(api.rows().length,7,'do not save changed endpoints while probes are in flight');
+  release();await pending;
+  assert.equal(seen.length,7,'one failed request cannot stop remaining ports');
+  assert(seen.includes('batch-6'),'test disabled port without enabling it');
+  assert.equal(api.rows()[6].enabled,false);
+  assert.equal(batchButton.disabled,false);
+  const status=document.getElementById('slotBatchState').textContent;
+  assert(status.includes('7/7')&&status.includes('5 通过')&&status.includes('2 失败'));
+  assert(status.includes('<bad-port>'),'error details are written as text, not HTML');
+  assert.equal(api.slotLatencyState(batchRows[0]).text,'123 ms');
+  assert.equal(api.slotLatencyState(batchRows[1]).text,'不可用');
+  api.addProxySlotRow();const old=seen.length;
+  await api.testAllProxySlots(batchButton);
+  assert.equal(seen.length,old,'never auto-save dirty rows just to run probes');
+  assert(document.getElementById('slotBatchState').textContent.includes('请先保存'));
 
   console.log('slot editor assertions passed');
 })().catch(error => { console.error(error); process.exit(1); });
