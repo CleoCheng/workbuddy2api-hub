@@ -31,6 +31,45 @@ off by default; unknown geography does not authorize a country change.
 
 ## 判定与切换 / Health decisions and switching
 
+### 可选全量排名 / Optional full ranking
+
+勾选「按订阅全量测速排名选节点」，保存后会通过独立探测端口串行测试 HTTP/File
+订阅中所有可供生产组使用的节点，不受旧的「每轮备用节点上限」限制；探测期间
+不改变生产节点，面板显示进度。每 1800 秒重新全量测试，也可点击「全量测速并
+重新排名」。请求异常仍触发槽位复检，故障/高延迟需要新排名时全扫最短间隔为
+300 秒，避免反复拉取小响应。大订阅、超时或 IP 信息查询可能使一轮耗时数分钟。
+
+先按实测 HTTPS 延迟排序，将与本组最快节点相差不超过 10% 的节点视为接近，
+仅在此范围内住宅优先；10% 为可修改的 `residential_tie_pct`，设为 0 即严格按
+延迟（仅同延迟时住宅优先）。每段以最快节点为固定基准，避免接近关系连锁放宽。
+按实际 IP 去重后，为已启用、已映射的 N 个槽位选择前 N 个出口，保留已在榜内
+的节点。停用/未映射槽位仍占用其出口。全局前 N 需开启「允许跨国家切换」；
+关闭时保留原国家约束，可能无法满足全局排名。
+
+默认连续 3 次超过 1500 ms 触发慢节点轮换，备用须重新实测且至少快 20%。
+故障仍须连续失败及第二地址确认。正常周期排名重新分配前 N，排名收敛仍受
+600 秒冷却、可用备用数量、生产组可选节点范围及复测结果约束。无更好备用时
+保留可连接的慢节点，真正不可用的槽位暂停新请求。少于 N 个可用独立 IP 时
+如实显示不足，不拿重复 IP 或直连补数。
+
+排名是一次小响应实测快照，延迟和出口 IP 可变化；不是持续不变的性能保证。
+住宅类型来自现有 IP 信息服务的 hosting 分类，查询失败时标为未知，不能保证
+供应商确实提供住宅或独享 IP。切换前后复测，不会重放模型请求。
+
+Enable full ranking to serially probe every eligible HTTP/File provider node
+through the dedicated listener. The legacy sample limit does not truncate scans.
+Default full scans run every 1800 seconds; manual rescans are available. Fault or
+slow-exit refreshes are throttled to at least 300 seconds. Scans can take minutes.
+Within anchored latency bands of at most 10%, prefer residential exits; setting
+`residential_tie_pct=0` sorts strictly by latency with residential preference only
+for exact ties. Deduplicate actual IPs and select the top N for existing enabled,
+mapped slots, reserving disabled/unmanaged exits. Global selection requires
+country changes to be enabled. Cooldowns and revalidation may delay convergence.
+Three consecutive checks above 1500 ms require a freshly verified spare at least
+20% faster. Reachable slow slots stay available when no better spare exists;
+failed slots remain blocked. Rankings are measured snapshots, and residential
+classification is an external hosting heuristic rather than a guarantee.
+
 - 定时检查的是连接、出口 IP 和小响应延迟，不下载大文件测带宽，也不调用模型。
 - 连接超时、连接重置、DNS 失败、异常 EOF 及 HTTP 502/503/504 触发异步复检。
   一个代理地址 20 秒内只接收一次请求故障信号，不阻塞模型请求执行探测。
@@ -62,7 +101,7 @@ replays inference requests.
 
 「一键测试全部槽位」以三个并发检查所有已保存的端口（含停用槽位），逐项更新
 延迟并显示进度、通过/失败数量及错误。测试不会启用槽位或改动账号绑定；有未保存
-编辑时先保存再测试。检查器与手动测试测量当前监听端口，不遍历订阅里的每个节点。
+编辑时先保存再测试。此按钮只测量当前监听端口；遍历订阅需另外启用全量排名。
 
 Test all saved slots checks every configured port, including disabled slots,
 with three workers and live results. It does not enable slots or rebind accounts;

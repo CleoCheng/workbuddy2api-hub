@@ -19,6 +19,7 @@ const dom = require('./_dom_stub.js');
 // What the server would return for GET /proxy/slots; the test swaps it.
 let serverSlots = [];
 let health = {config:{enabled:false,interval:90,failures:3,cooldown:600,timeout:5,
+                     ranked:true,rank_interval:1800,slow_ms:1500,slow_failures:3,improvement_pct:20,residential_tie_pct:10,
                      candidate_limit:12,groups:{}}, slots:{}, history:[]};
 let healthSaved;
 let testBehavior=null;
@@ -120,9 +121,16 @@ const api = new Function(script + `
   await api.saveProxyHealth({disabled:false});
   assert.equal(healthSaved.interval, 120);
   assert.equal(healthSaved.groups['slot-1'], 'Exit 01');
+  assert.equal(healthSaved.ranked, true);
+  assert.equal(healthSaved.slow_ms, 1500);
+  assert.equal(healthSaved.rank_interval, 1800);
+  assert.equal(healthSaved.residential_tie_pct, 10);
+  health.ranking={done:47,total:47,assigned:10,target:10,ranked:[{rank:1,node:'<script>rank</script>',ip:'8.8.8.8',latency_ms:100}]};
   health.slots['slot-1'] = {id:'slot-1', node:'<script>bad</script>', status:'healthy', ip:'203.0.113.1'};
   await api.loadProxyHealth();
   assert.ok(!document.getElementById('proxyHealthRows').innerHTML.includes('<script>'));
+  assert.ok(!document.getElementById('proxyHealthRanking').innerHTML.includes('<script>'));
+  assert.ok(document.getElementById('proxyHealthRanking').innerHTML.includes('47 / 47'));
 
   // Delay bands include exact boundaries; errors never display an old success.
   const measured={id:'measured',url:'http://127.0.0.1:17903',enabled:true};
