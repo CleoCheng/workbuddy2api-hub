@@ -25,25 +25,22 @@ const PANEL_STORE = 'wb-proxy-panel-token';
 </script>
 <style>
 :root{
-  /* 对比度增强 v2（2026-10-15）：信号元素进一步推强。
-     --accent 3.90→6.23、--dim 4.48→5.35(bg)、--accent2 3.93→5.75、
-     bg/panel 层次 1.09→1.19、边框 1.28→1.56。 */
-  --bg:#efebe0; --panel:#ffffff; --panel2:#e9e5d6; --panel3:#e0dbc9;
-  --line:#d5cfbc; --line-hover:#c5bfab;
-  --fg:#1f1e1b; --dim:#625f57; --dim-light:#87847a;
-  --accent:#a14427; --accent-hover:#8a3a20; --accent-soft:rgba(161,68,39,.09);
-  --accent-selected-bg:rgba(161,68,39,.14); --bad-selected-bg:rgba(181,71,59,.12);
-  --accent2:#497035; --accent2-soft:rgba(73,112,53,.12);
-  --warn:#a0691c; --warn-soft:rgba(183,121,31,.12);
-  --think:#7d5c8a; --think-soft:rgba(125,92,138,.10);
-  --bad:#b5473b; --bad-soft:rgba(181,71,59,.09);
-  --shadow-sm:0 1px 2px 0 rgba(31,30,27,.05);
-  --shadow:0 1px 2px 0 rgba(31,30,27,.05),0 4px 14px rgba(31,30,27,.04);
-  --shadow-md:0 2px 6px 0 rgba(31,30,27,.06),0 12px 32px rgba(31,30,27,.09);
-  --header-bg:rgba(239,235,224,.92);
-  --on-accent:#fff; --danger-bg:rgba(181,71,59,.14); --danger-border:rgba(181,71,59,.35);
-  --overlay-mask:rgba(15,23,42,.45); --terminal-bg:#16140f; --terminal-head:#1d1b15;
-  --terminal-border:#2b2820; --terminal-fg:#d6d3c9; --terminal-dim:#7c796f;
+  --bg:#f8fafc; --panel:#ffffff; --panel2:#f1f5f9; --panel3:#e2e8f0;
+  --line:#e2e8f0; --line-hover:#cbd5e1;
+  --fg:#0f172a; --dim:#64748b; --dim-light:#94a3b8;
+  --accent:#2563eb; --accent-hover:#1d4ed8; --accent-soft:rgba(37,99,235,.08);
+  --accent-selected-bg:rgba(37,99,235,.12); --bad-selected-bg:rgba(239,68,68,.12);
+  --accent2:#10b981; --accent2-soft:rgba(16,185,129,.12);
+  --warn:#d97706; --warn-soft:rgba(217,119,6,.12);
+  --think:#7c3aed; --think-soft:rgba(124,58,237,.10);
+  --bad:#ef4444; --bad-soft:rgba(239,68,68,.10);
+  --shadow-sm:0 1px 2px 0 rgba(15,23,42,.05);
+  --shadow:0 1px 3px 0 rgba(15,23,42,.07),0 4px 14px -2px rgba(15,23,42,.05);
+  --shadow-md:0 4px 6px -1px rgba(15,23,42,.08),0 12px 28px -4px rgba(15,23,42,.08);
+  --header-bg:rgba(248,250,252,.90);
+  --on-accent:#fff; --danger-bg:rgba(239,68,68,.12); --danger-border:rgba(239,68,68,.30);
+  --overlay-mask:rgba(15,23,42,.45); --terminal-bg:#0f172a; --terminal-head:#1e293b;
+  --terminal-border:#334155; --terminal-fg:#f8fafc; --terminal-dim:#94a3b8;
   --terminal-error:#ef4444; --terminal-warn:#f59e0b; --terminal-ok:#10b981;
   --chart-axis:#1e293b; --chart-text:#64748b; --chart-bar:#38bdf8; --chart-line:#a78bfa;
   --summary-row-bg:rgba(37,99,235,.06); --toast-bad-bg:rgba(254,242,242,.98); --toast-warn-bg:rgba(255,251,235,.98);
@@ -55,24 +52,22 @@ const PANEL_STORE = 'wb-proxy-panel-token';
   color-scheme:light;
 }
 [data-theme="dark"]{
-  /* 对比度增强 v2（2026-10-15）：--accent 4.73→5.52、表面层次 1.13→1.19、
-     边框 1.38→1.61。暗色下强调色提亮保持信号锐度。 */
-  --bg:#1f1e1b; --panel:#2d2c25; --panel2:#38362f; --panel3:#433f37;
-  --line:#4f4b42; --line-hover:#5d584e;
-  --fg:#edebe3; --dim:#a5a29a; --dim-light:#7c796f;
-  --accent:#e88a68; --accent-hover:#f0967a; --accent-soft:rgba(232,138,104,.14);
-  --accent-selected-bg:rgba(232,138,104,.18); --bad-selected-bg:rgba(217,123,114,.16);
-  --accent2:#8fae78; --accent2-soft:rgba(143,174,120,.15);
-  --warn:#d9b25f; --warn-soft:rgba(217,178,95,.15);
-  --think:#bfa3cc; --think-soft:rgba(191,163,204,.15);
-  --bad:#d97b72; --bad-soft:rgba(217,123,114,.15);
-  --shadow-sm:0 1px 2px 0 rgba(0,0,0,.25);
-  --shadow:0 1px 2px 0 rgba(0,0,0,.25),0 4px 14px rgba(0,0,0,.25);
-  --shadow-md:0 2px 6px 0 rgba(0,0,0,.3),0 12px 32px rgba(0,0,0,.4);
-  --header-bg:rgba(31,30,27,.92);
-  --on-accent:#fff; --danger-bg:rgba(217,123,114,.15); --danger-border:rgba(217,123,114,.35);
-  --overlay-mask:rgba(0,0,0,.65); --terminal-bg:#16140f; --terminal-head:#1d1b15;
-  --terminal-border:#2b2820; --terminal-fg:#d6d3c9; --terminal-dim:#7c796f;
+  --bg:#0b0f19; --panel:#111827; --panel2:#1a2333; --panel3:#263348;
+  --line:#1e293b; --line-hover:#334155;
+  --fg:#f8fafc; --dim:#94a3b8; --dim-light:#64748b;
+  --accent:#3b82f6; --accent-hover:#60a5fa; --accent-soft:rgba(59,130,246,.15);
+  --accent-selected-bg:rgba(59,130,246,.22); --bad-selected-bg:rgba(248,113,113,.16);
+  --accent2:#34d399; --accent2-soft:rgba(52,211,153,.16);
+  --warn:#fbbf24; --warn-soft:rgba(251,191,36,.16);
+  --think:#a78bfa; --think-soft:rgba(167,139,250,.16);
+  --bad:#f87171; --bad-soft:rgba(248,113,113,.16);
+  --shadow-sm:0 1px 2px 0 rgba(0,0,0,.35);
+  --shadow:0 1px 3px 0 rgba(0,0,0,.4),0 8px 24px -2px rgba(0,0,0,.5);
+  --shadow-md:0 4px 8px -1px rgba(0,0,0,.5),0 16px 36px -4px rgba(0,0,0,.6);
+  --header-bg:rgba(11,15,25,.88);
+  --on-accent:#fff; --danger-bg:rgba(248,113,113,.15); --danger-border:rgba(248,113,113,.35);
+  --overlay-mask:rgba(0,0,0,.65); --terminal-bg:#0b0f19; --terminal-head:#111827;
+  --terminal-border:#1e293b; --terminal-fg:#f8fafc; --terminal-dim:#94a3b8;
   --terminal-error:#ef4444; --terminal-warn:#f59e0b; --terminal-ok:#10b981;
   --chart-axis:#cbd5e1; --chart-text:#94a3b8; --chart-bar:#38bdf8; --chart-line:#c084fc;
   --summary-row-bg:rgba(59,130,246,.12); --toast-bad-bg:rgba(69,10,10,.95); --toast-warn-bg:rgba(69,43,8,.95);
@@ -610,6 +605,25 @@ a:hover{text-decoration:underline}
 [data-theme="dark"] .realm-badge-cn{color:#e09a80;background:rgba(201,100,66,.22);border-color:rgba(201,100,66,.42)}
 [data-theme="dark"] .realm-switch button.active#accountsRealmCn{color:var(--bad);border-color:var(--bad)}
 [data-theme="dark"] .modal-mask{background:rgba(0,0,0,.65)}
+
+/* 设置页分类子导航 / Settings Sub-Navigation */
+.settings-cat-bar{display:flex;align-items:center;gap:6px;margin:0 0 18px;padding:4px;background:var(--panel2);border:1px solid var(--line);border-radius:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.settings-cat-bar::-webkit-scrollbar{display:none}
+.settings-cat-btn{appearance:none;display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:transparent;border:1px solid transparent;border-radius:7px;color:var(--dim);font:inherit;font-size:12px;font-weight:500;cursor:pointer;white-space:nowrap;transition:all .15s ease}
+.settings-cat-btn:hover{color:var(--fg);background:var(--panel)}
+.settings-cat-btn.active{background:var(--panel);color:var(--accent);font-weight:600;border-color:var(--line);box-shadow:var(--shadow-sm)}
+
+/* 账号快速搜索与状态筛选条 / Account Quick Filter Bar */
+.acct-filter-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+.acct-search-box{position:relative;display:inline-flex;align-items:center;min-width:240px;flex:1;max-width:420px}
+.acct-search-input{width:100%;height:32px;padding:4px 10px 4px 30px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;font:inherit;font-size:12px;color:var(--fg);outline:none;transition:border-color .15s,box-shadow .15s}
+.acct-search-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.acct-search-icon{position:absolute;left:9px;width:14px;height:14px;color:var(--dim);pointer-events:none}
+.acct-status-filters{display:inline-flex;align-items:center;gap:4px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:2px}
+.acct-status-btn{appearance:none;border:none;background:transparent;color:var(--dim);font:inherit;font-size:11px;font-weight:500;padding:4px 10px;border-radius:6px;cursor:pointer;transition:all .15s}
+.acct-status-btn:hover{color:var(--fg)}
+.acct-status-btn.active{background:var(--panel);color:var(--fg);font-weight:600;box-shadow:var(--shadow-sm)}
+.acct-filter-stat{font-size:11px;color:var(--dim);white-space:nowrap}
 /* The page sections are toggled by a class so the inline head script can
    choose one before the body is parsed, avoiding a flash of the wrong
    page on every reload. */
@@ -1295,7 +1309,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
   var THEME_KEY = 'wb-theme';
   var THEME_STYLE_KEY = 'wb-theme-style';
   var THEME_STYLES = {
-    claude: {label:'Claude', light:{"--bg":"#efebe0","--panel":"#ffffff","--panel2":"#e9e5d6","--panel3":"#e0dbc9","--line":"#d5cfbc","--line-hover":"#c5bfab","--fg":"#1f1e1b","--dim":"#625f57","--dim-light":"#87847a","--accent":"#a14427","--accent-hover":"#8a3a20","--accent-soft":"rgba(161,68,39,.09)","--accent-selected-bg":"rgba(161,68,39,.14)","--accent2":"#497035","--accent2-soft":"rgba(73,112,53,.12)","--warn":"#a0691c","--warn-soft":"rgba(183,121,31,.12)","--think":"#7d5c8a","--think-soft":"rgba(125,92,138,.10)","--bad":"#b5473b","--bad-soft":"rgba(181,71,59,.09)","--shadow-sm":"0 1px 2px 0 rgba(31,30,27,.05)","--shadow":"0 1px 2px 0 rgba(31,30,27,.05),0 4px 14px rgba(31,30,27,.04)","--shadow-md":"0 2px 6px 0 rgba(31,30,27,.06),0 12px 32px rgba(31,30,27,.09)","--header-bg":"rgba(239,235,224,.92)","--hm0":"#ece6db","--hm1":"#f3d5c1","--hm2":"#e8a98a","--hm3":"#d6846a","--hm4":"#b4533a"}, dark:{"--bg":"#1f1e1b","--panel":"#2d2c25","--panel2":"#38362f","--panel3":"#433f37","--line":"#4f4b42","--line-hover":"#5d584e","--fg":"#edebe3","--dim":"#a5a29a","--dim-light":"#9c9a90","--accent":"#e88a68","--accent-hover":"#f0967a","--accent-soft":"rgba(232,138,104,.14)","--accent-selected-bg":"rgba(232,138,104,.18)","--accent2":"#8fae78","--accent2-soft":"rgba(143,174,120,.15)","--warn":"#d9b25f","--warn-soft":"rgba(217,178,95,.15)","--think":"#bfa3cc","--think-soft":"rgba(191,163,204,.15)","--bad":"#d97b72","--bad-soft":"rgba(217,123,114,.15)","--shadow-sm":"0 1px 2px 0 rgba(0,0,0,.25)","--shadow":"0 1px 2px 0 rgba(0,0,0,.25),0 4px 14px rgba(0,0,0,.25)","--shadow-md":"0 2px 6px 0 rgba(0,0,0,.3),0 12px 32px rgba(0,0,0,.4)","--header-bg":"rgba(31,30,27,.92)","--hm0":"#2b2924","--hm1":"#3d352e","--hm2":"#5a3e30","--hm3":"#8a5a45","--hm4":"#c97250"}},
+    claude: {label:'Claude', light:{"--bg":"#f8fafc","--panel":"#ffffff","--panel2":"#f1f5f9","--panel3":"#e2e8f0","--line":"#e2e8f0","--line-hover":"#cbd5e1","--fg":"#0f172a","--dim":"#64748b","--dim-light":"#94a3b8","--accent":"#2563eb","--accent-hover":"#1d4ed8","--accent-soft":"rgba(37,99,235,.08)","--accent-selected-bg":"rgba(37,99,235,.12)","--accent2":"#10b981","--accent2-soft":"rgba(16,185,129,.12)","--warn":"#d97706","--warn-soft":"rgba(217,119,6,.12)","--think":"#7c3aed","--think-soft":"rgba(124,58,237,.10)","--bad":"#ef4444","--bad-soft":"rgba(239,68,68,.10)","--shadow-sm":"0 1px 2px 0 rgba(15,23,42,.05)","--shadow":"0 1px 3px 0 rgba(15,23,42,.07),0 4px 14px -2px rgba(15,23,42,.05)","--shadow-md":"0 4px 6px -1px rgba(15,23,42,.08),0 12px 28px -4px rgba(15,23,42,.08)","--header-bg":"rgba(248,250,252,.90)","--hm0":"#e0e7ff","--hm1":"#c7d2fe","--hm2":"#93c5fd","--hm3":"#60a5fa","--hm4":"#2563eb"}, dark:{"--bg":"#0b0f19","--panel":"#111827","--panel2":"#1a2333","--panel3":"#263348","--line":"#1e293b","--line-hover":"#334155","--fg":"#f8fafc","--dim":"#94a3b8","--dim-light":"#64748b","--accent":"#3b82f6","--accent-hover":"#60a5fa","--accent-soft":"rgba(59,130,246,.15)","--accent-selected-bg":"rgba(59,130,246,.22)","--accent2":"#34d399","--accent2-soft":"rgba(52,211,153,.16)","--warn":"#fbbf24","--warn-soft":"rgba(251,191,36,.16)","--think":"#a78bfa","--think-soft":"rgba(167,139,250,.16)","--bad":"#f87171","--bad-soft":"rgba(248,113,113,.16)","--shadow-sm":"0 1px 2px 0 rgba(0,0,0,.35)","--shadow":"0 1px 3px 0 rgba(0,0,0,.4),0 8px 24px -2px rgba(0,0,0,.5)","--shadow-md":"0 4px 8px -1px rgba(0,0,0,.5),0 16px 36px -4px rgba(0,0,0,.6)","--header-bg":"rgba(11,15,25,.88)","--hm0":"#1e293b","--hm1":"#1e3a5f","--hm2":"#1d4ed8","--hm3":"#2563eb","--hm4":"#3b82f6"}},
     material: {label:'Material', light:{"--bg":"#fefbff","--panel":"#ffffff","--panel2":"#f5eff7","--panel3":"#ece6f0","--line":"#cac4d0","--line-hover":"#b4aab8","--fg":"#1d1b20","--dim":"#5b5b66","--dim-light":"#767680","--accent":"#6750a4","--accent-hover":"#4f378b","--accent-soft":"#eaddff","--accent-selected-bg":"#e8def8","--accent2":"#006a60","--accent2-soft":"#ccfbee","--warn":"#7e5260","--bad":"#b3261e","--bad-soft":"#f9dedc","--think":"#5e5891","--think-soft":"#e5dffa","--shadow-sm":"0 1px 2px 0 rgba(29,27,32,.15)","--shadow":"0 1px 2px 0 rgba(29,27,32,.18),0 1px 3px 1px rgba(29,27,32,.10)","--shadow-md":"0 2px 4px -1px rgba(29,27,32,.12),0 4px 6px 1px rgba(29,27,32,.10)","--header-bg":"rgba(254,251,255,.94)","--hm0":"#e8def8","--hm1":"#d3c2f1","--hm2":"#b8a1ec","--hm3":"#9a82e3","--hm4":"#6750a4"}, dark:{"--bg":"#141218","--panel":"#211f26","--panel2":"#2b2930","--panel3":"#36343b","--line":"#49454f","--line-hover":"#5b5963","--fg":"#e6e1e5","--dim":"#c4c5d0","--dim-light":"#928f9a","--accent":"#d0bcff","--accent-hover":"#b9a4fa","--accent-soft":"rgba(208,188,255,.24)","--accent-selected-bg":"rgba(208,188,255,.30)","--accent2":"#4ecdb4","--accent2-soft":"rgba(78,205,180,.24)","--warn":"#f2b8b4","--bad":"#f2b8b4","--bad-soft":"rgba(242,184,180,.24)","--think":"#cfc4f7","--think-soft":"rgba(207,196,247,.18)","--shadow-sm":"0 1px 2px 0 rgba(0,0,0,.30)","--shadow":"0 1px 2px 0 rgba(0,0,0,.40),0 1px 3px 1px rgba(0,0,0,.30)","--shadow-md":"0 2px 4px -1px rgba(0,0,0,.45),0 4px 6px 1px rgba(0,0,0,.32)","--header-bg":"rgba(20,18,24,.88)","--hm0":"#2b2930","--hm1":"#332e44","--hm2":"#3d3460","--hm3":"#4d4080","--hm4":"#d0bcff"}},
     miuix: {label:'MiuiX', light:{"--bg":"#f6f7fa","--panel":"#ffffff","--panel2":"#eef0f4","--panel3":"#e2e6ee","--line":"#dde1e8","--line-hover":"#c9d0db","--fg":"#1f2024","--dim":"#5f6671","--dim-light":"#8c93a0","--accent":"#ff5c00","--accent-hover":"#ff7a33","--accent-soft":"rgba(255,92,0,.10)","--accent-selected-bg":"rgba(255,92,0,.18)","--accent2":"#07c160","--accent2-soft":"rgba(7,193,96,.12)","--warn":"#d48200","--bad":"#e53935","--bad-soft":"rgba(229,57,53,.10)","--think":"#7c4dff","--think-soft":"rgba(124,77,255,.10)","--shadow-sm":"0 1px 2px 0 rgba(31,32,36,.05)","--shadow":"0 2px 6px 0 rgba(31,32,36,.08)","--shadow-md":"0 6px 16px 0 rgba(31,32,36,.10)","--header-bg":"rgba(255,255,255,.85)","--hm0":"#ffece0","--hm1":"#ffd0b8","--hm2":"#ffb085","--hm3":"#ff8c4a","--hm4":"#ff5c00"}, dark:{"--bg":"#0e0f12","--panel":"#191b1f","--panel2":"#22252b","--panel3":"#2a2d34","--line":"#2e3239","--line-hover":"#3a3f48","--fg":"#f0f1f4","--dim":"#9aa0aa","--dim-light":"#7a8090","--accent":"#ff7a33","--accent-hover":"#ff9056","--accent-soft":"rgba(255,122,51,.18)","--accent-selected-bg":"rgba(255,122,51,.26)","--accent2":"#3ed984","--accent2-soft":"rgba(62,217,132,.20)","--warn":"#ffb852","--bad":"#ff6f6f","--bad-soft":"rgba(255,111,111,.16)","--think":"#a78bff","--think-soft":"rgba(167,139,255,.18)","--shadow-sm":"0 1px 2px 0 rgba(0,0,0,.40)","--shadow":"0 2px 6px 0 rgba(0,0,0,.55)","--shadow-md":"0 6px 18px 0 rgba(0,0,0,.60)","--header-bg":"rgba(14,15,18,.78)","--hm0":"#22252b","--hm1":"#332820","--hm2":"#4a2c20","--hm3":"#5c3220","--hm4":"#ff7a33"}}
   };
@@ -1498,6 +1512,15 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
   var ATTRS = ['title', 'placeholder', 'aria-label', 'data-label', 'alt'];
   var SKIP = {SCRIPT: 1, STYLE: 1, TEXTAREA: 1, NOSCRIPT: 1};
   var DICT = {
+    "全部设置": "All settings",
+    "🔑 API Key 与访问": "🔑 API keys & access",
+    "🌐 网络与代理": "🌐 Network & proxies",
+    "🤖 模型与调度": "🤖 Models & routing",
+    "🛡️ 安全与隐私": "🛡️ Security & privacy",
+    "⚙️ 系统与高级": "⚙️ System & advanced",
+    "搜索账号 UID / 备注 / 出口 IP...": "Search account UID / note / exit IP...",
+    "全部状态": "All status",
+    "冷却/限流": "Cooldown",
     "批量测试进行中，请稍后保存槽位。": "Batch test is running. Save slots after it finishes.",
     "一键测试全部槽位": "Test all proxy slots",
     "代理槽对应 Mihomo 监听端口，不等于订阅节点数；一个出口组可以引用两个订阅的全部节点。扩展槽位需先新增监听端口并调整发现范围，独立探测端口不应导入账号槽位。": "Proxy slots are Mihomo listeners, not subscription nodes. Each exit group can use both subscriptions. Add listeners and adjust the discovery range to expand slots; never import the dedicated probe listener.",
@@ -4724,6 +4747,19 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     <button class="sec" onclick="setAll(false, this)">全部停用</button>
     </div>
   </div>
+    <div class="acct-filter-bar">
+      <div class="acct-search-box">
+        <svg class="acct-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="acctSearchInput" class="acct-search-input" placeholder="搜索账号 UID / 备注 / 出口 IP..." oninput="filterAccountsList()" autocomplete="off">
+      </div>
+      <div class="acct-status-filters" id="acctStatusFilters">
+        <button type="button" class="acct-status-btn active" data-status="all" onclick="filterAccountsByStatus('all', this)">全部状态</button>
+        <button type="button" class="acct-status-btn" data-status="active" onclick="filterAccountsByStatus('active', this)">正常</button>
+        <button type="button" class="acct-status-btn" data-status="cooldown" onclick="filterAccountsByStatus('cooldown', this)">冷却/限流</button>
+        <button type="button" class="acct-status-btn" data-status="disabled" onclick="filterAccountsByStatus('disabled', this)">停用</button>
+      </div>
+      <span id="acctFilterStats" class="acct-filter-stat"></span>
+    </div>
     <div id="accounts"></div>
       </div>
     </div>
@@ -5221,10 +5257,18 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
       <h2 style="margin:0;font-size:17px;color:var(--fg);font-family:var(--serif);font-weight:600;letter-spacing:.02em">网关设置</h2>
       <div style="font-size:12px;color:var(--dim);margin-top:4px">面板密码与界面语言、API Key 与出口绑定、代理槽与限额、价格估算、出站身份与本地网络工具。</div>
     </div>
+    <div class="settings-cat-bar" id="settingsCatBar" role="tablist" aria-label="设置分类">
+      <button type="button" class="settings-cat-btn active" data-cat="all" onclick="switchSettingsCategory('all', this)" role="tab">全部设置</button>
+      <button type="button" class="settings-cat-btn" data-cat="apikey" onclick="switchSettingsCategory('apikey', this)" role="tab">🔑 API Key 与访问</button>
+      <button type="button" class="settings-cat-btn" data-cat="proxy" onclick="switchSettingsCategory('proxy', this)" role="tab">🌐 网络与代理</button>
+      <button type="button" class="settings-cat-btn" data-cat="model" onclick="switchSettingsCategory('model', this)" role="tab">🤖 模型与调度</button>
+      <button type="button" class="settings-cat-btn" data-cat="security" onclick="switchSettingsCategory('security', this)" role="tab">🛡️ 安全与隐私</button>
+      <button type="button" class="settings-cat-btn" data-cat="system" onclick="switchSettingsCategory('system', this)" role="tab">⚙️ 系统与高级</button>
+    </div>
 
     <!-- 左侧导航由 initPageNav() 扫描本页的 section 自动生成，
          增删区块无需同步改动这里。 -->
-    <section>
+    <section data-settings-cat="security">
       <h2>面板访问密码 <em id="setPwdState"></em></h2>
       <div style="font-size:12px;color:var(--dim);margin-bottom:12px">用于打开本看板。默认密码为 <b>admin</b>，建议立即修改。</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
@@ -5242,7 +5286,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
       </div>
     </section>
 
-    <section>
+    <section data-settings-cat="system">
       <h2>界面语言 <em id="setUiLanguageState"></em></h2>
       <div style="font-size:12px;color:var(--dim);margin-bottom:12px">
         这里设置的是这台网关的实例默认语言；右上角语言按钮只覆盖当前浏览器，换端口、主机名或清掉站点数据后会回退到这个默认值。
@@ -5261,7 +5305,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
       </div>
     </section>
 
-    <section>
+    <section data-settings-cat="system">
       <h2>顶部页签显示 <em id="setPagesState"></em></h2>
       <div style="font-size:12px;color:var(--dim);margin-bottom:12px">
         取消勾选就把该页签从顶部收起来，勾回来即恢复；清单按顶部现有的页签现场生成，上游增删页面这里自动跟上；偏好存在本网关，换浏览器、重启服务都记得。「设置」是这一页自己的入口，固定保留。
@@ -5269,7 +5313,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
       <div id="setPagesList" style="display:flex;flex-wrap:wrap;gap:8px 20px"></div>
     </section>
 
-    <section>
+    <section data-settings-cat="system">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
         <div>
           <h2 style="margin:0">账号独立成一个页签 <em id="setAccountsSeparateState"></em></h2>
@@ -5287,7 +5331,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
       </div>
     </section>
 
-    <section>
+    <section data-settings-cat="system">
       <h2>面板窗口限高 <em id="setWinMaxHeightState"></em></h2>
       <div style="font-size:12px;color:var(--dim);margin-bottom:12px">
         每个窗口（区块）超过这个高度时在窗口内部滚动，不再把整页拉长；滚动时标题行固定在窗口顶部。单位像素；填 0 表示不限。
@@ -5300,7 +5344,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
       </div>
     </section>
 
-    <section>
+    <section data-settings-cat="apikey">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
         <div>
           <h2 style="margin:0">API Key <em id="setKeyState"></em></h2>
@@ -5316,7 +5360,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
       <div id="deletedKeySection"></div>
     </section>
 
-    <section>
+    <section data-settings-cat="proxy">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
         <div>
           <h2 style="margin:0">账号代理槽 <em id="slotState"></em></h2>
@@ -5381,7 +5425,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
       </details>
     </section>
 
-    <section>
+    <section data-settings-cat="apikey">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
         <div>
           <h2 style="margin:0">账号限额 <em id="setLimitsState"></em></h2>
@@ -5482,7 +5526,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     </section>
 
 
-      <section>
+      <section data-settings-cat="model">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">模型价格估算 <em id="setPricingEnabledState"></em></h2>
@@ -5528,7 +5572,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="model">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">启用 Anthropic Messages 接口 (Claude) <em id="setAnthropicMessagesState"></em></h2>
@@ -5549,7 +5593,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="model">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">思考等级挡位映射 <em id="setReasoningEffortMapState"></em></h2>
@@ -5567,7 +5611,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="apikey">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">按 API Key 过滤模型列表 <em id="setFilterModelsByKeyState"></em></h2>
@@ -5585,7 +5629,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="model">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">只列出可用模型 <em id="setModelsOnlyAvailableState"></em></h2>
@@ -5603,7 +5647,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="model">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">免费额度耗尽回退积分版 <em id="setCreditFallbackState"></em></h2>
@@ -5624,7 +5668,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="proxy">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">自动切换出站身份 <em id="setAutoSwitchState"></em></h2>
@@ -5657,7 +5701,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="security">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">数据用途声明 <em id="setPrivateDataState"></em></h2>
@@ -5679,7 +5723,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="security">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">出站身份版本号 <em id="setIdentityVersionsState"></em></h2>
@@ -5732,7 +5776,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="model">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">国际版每日活跃打卡 <em id="setDailyChatWebState"></em></h2>
@@ -5875,7 +5919,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="model">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">全局提示词 <em id="setGlobalPromptState"></em></h2>
@@ -5898,7 +5942,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="model">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">本地网络工具 <em id="setLocalWebToolsState"></em></h2>
@@ -5919,7 +5963,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="model">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">剩余用量优先调度 <em id="setRemainingPriorityState"></em></h2>
@@ -5940,7 +5984,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="proxy">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">跨出口回退（国际版 → 国内版） <em id="setRealmFallbackState"></em></h2>
@@ -5961,7 +6005,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="model">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">模型额度窗口探针 <em id="setWindowProbeState"></em></h2>
@@ -5982,7 +6026,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="proxy">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">出口级瞬时失败退避 <em id="setEgressBackoffState"></em></h2>
@@ -6000,7 +6044,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="model">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">模型额度定时主动查询 <em id="setQuotaScanState"></em></h2>
@@ -6025,7 +6069,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         <div id="quotaScanState" style="margin-top:12px"></div>
       </section>
 
-      <section>
+      <section data-settings-cat="system">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">用量聚合保留窗口 <em id="setUsageKeepState"></em></h2>
@@ -6052,7 +6096,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
           </div>
         </div>
       </section>
-      <section>
+      <section data-settings-cat="proxy">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">上游响应头超时 <em id="setHeaderTimeoutState"></em></h2>
@@ -6073,7 +6117,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="apikey">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">账号级并发上限 <em id="setAccountConcurrentState"></em></h2>
@@ -6100,7 +6144,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="model">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">更稳的会话粘滞键 <span class="help-mark" role="button" tabindex="0" aria-label="功能说明" onclick="toggleHelpDetail('affinityStableKeyHelp', event)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleHelpDetail('affinityStableKeyHelp', event);}">!</span> <em id="setAffinityStableKeyState"></em></h2>
@@ -6120,7 +6164,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="proxy">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">上游响应头超时 <em id="setHeaderTimeoutState"></em></h2>
@@ -6141,7 +6185,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="system">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">日志落库 <em id="setLogDbState"></em></h2>
@@ -6178,7 +6222,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="system">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">更新 <em id="setUpdateState"></em></h2>
@@ -6228,7 +6272,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         </div>
       </section>
 
-      <section>
+      <section data-settings-cat="system">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
           <div>
             <h2 style="margin:0">版本回退 <em id="setRollbackState"></em></h2>
@@ -6251,7 +6295,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
         <div id="setRollbackHint" style="font-size:12px;color:var(--dim);margin-top:8px"></div>
       </section>
 
-      <section>
+      <section data-settings-cat="system">
         <h2>运行信息</h2>
       <table>
         <tbody>
@@ -9674,6 +9718,65 @@ function renderAccounts(){
   // 表下不再堆两行说明图例（出站身份解释留在每行身份按钮组的悬停提示里，
   // 轮询/粘性说明挂到「账号列表」标题上），表格底部保持干净。
   applyTableSort('accounts');
+  if(typeof filterAccountsList === 'function') filterAccountsList();
+}
+
+let ACCT_FILTER_STATUS = 'all';
+function filterAccountsByStatus(status, btn){
+  ACCT_FILTER_STATUS = status;
+  const bar = document.getElementById('acctStatusFilters');
+  if(bar){
+    bar.querySelectorAll('.acct-status-btn').forEach(function(b){
+      b.classList.toggle('active', b.getAttribute('data-status') === status);
+    });
+  }
+  filterAccountsList();
+}
+
+function filterAccountsList(){
+  const input = document.getElementById('acctSearchInput');
+  const query = (input ? input.value : '').trim().toLowerCase();
+  const table = document.querySelector('table.account-cards');
+  if(!table) return;
+  const tbody = table.querySelector('tbody');
+  if(!tbody) return;
+  const rows = Array.from(tbody.children);
+  let visibleCount = 0;
+  let totalAccounts = 0;
+  let currentMatched = false;
+  
+  rows.forEach(function(row){
+    if(row.classList.contains('cool-row')){
+      row.style.display = currentMatched ? '' : 'none';
+      return;
+    }
+    totalAccounts++;
+    const text = (row.textContent || '').toLowerCase();
+    const isCool = row.classList.contains('has-alert');
+    const isOff = row.querySelector('.badge.off') !== null || (row.dataset && row.dataset.enabled === 'false');
+    let statusMatch = true;
+    if(ACCT_FILTER_STATUS === 'active') statusMatch = !isOff && !isCool;
+    else if(ACCT_FILTER_STATUS === 'cooldown') statusMatch = isCool;
+    else if(ACCT_FILTER_STATUS === 'disabled') statusMatch = isOff;
+    
+    const queryMatch = !query || text.includes(query);
+    currentMatched = statusMatch && queryMatch;
+    if(currentMatched){
+      row.style.display = '';
+      visibleCount++;
+    } else {
+      row.style.display = 'none';
+    }
+  });
+  
+  const stats = document.getElementById('acctFilterStats');
+  if(stats){
+    if(query || ACCT_FILTER_STATUS !== 'all'){
+      stats.textContent = '显示 ' + visibleCount + ' / 共 ' + totalAccounts;
+    } else {
+      stats.textContent = '';
+    }
+  }
 }
 
 async function loadAccounts(){
@@ -12601,10 +12704,45 @@ async function loadSettings(showToast){
               + (typeof usageDayKeep === 'number' ? usageDayKeep : 32) + ' 天)';
         usageKeepState.style.color = isDefault ? 'var(--dim)' : 'var(--accent2)';
       }
+    if(typeof restoreSettingsCategory === 'function') restoreSettingsCategory();
     if(showToast) toast('设置已刷新', 'ok');
   } catch(e) {
     if(showToast) toast('读取设置失败: ' + e.message, 'bad');
   }
+}
+
+function switchSettingsCategory(cat, btn){
+  const page = document.getElementById('pageSettings');
+  if(!page) return;
+  const bar = document.getElementById('settingsCatBar');
+  if(bar){
+    bar.querySelectorAll('.settings-cat-btn').forEach(function(b){
+      b.classList.toggle('active', b.getAttribute('data-cat') === cat);
+    });
+  }
+  try { sessionStorage.setItem('wb-settings-cat', cat); } catch(e){}
+  const body = page.querySelector('.page-nav-body') || page;
+  const sections = Array.from(body.children).filter(function(el){ return el.tagName === 'SECTION'; });
+  sections.forEach(function(sec){
+    const secCat = sec.getAttribute('data-settings-cat') || 'system';
+    if(cat === 'all' || secCat === cat){
+      sec.style.display = '';
+    } else {
+      sec.style.display = 'none';
+    }
+  });
+  if(typeof initPageNav === 'function'){
+    initPageNav(page);
+  }
+}
+
+function restoreSettingsCategory(){
+  const page = document.getElementById('pageSettings');
+  if(!page) return;
+  let cat = 'all';
+  try { cat = sessionStorage.getItem('wb-settings-cat') || 'all'; } catch(e){}
+  const btn = page.querySelector('.settings-cat-btn[data-cat="' + cat + '"]');
+  switchSettingsCategory(cat, btn);
 }
 
 function applyUiLanguageSelect(value){
@@ -15921,7 +16059,13 @@ function switchMainTab(tab){
     btn.classList.toggle('active', on);
     page.classList.toggle('active', name === pageTab);
     // 每个页面各自按自己的区块重建侧栏；非当前页的区块变化在切过来时补上
-    if(name === pageTab) initPageNav(page);
+    if(name === pageTab){
+      if(name === 'settings' && typeof restoreSettingsCategory === 'function'){
+        restoreSettingsCategory();
+      } else {
+        initPageNav(page);
+      }
+    }
   });
   if(qoderView){
     stopLogPolling();

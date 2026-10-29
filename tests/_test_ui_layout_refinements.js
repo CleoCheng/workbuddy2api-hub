@@ -31,4 +31,20 @@ assert.ok(/#pageAnalytics \.maingrid\{[^}]*align-items:stretch\}/.test(html), '�
 assert.ok(/#modelsTable\{table-layout:fixed\}/.test(html), '网关模型清单应固定布局占满宽度');
 assert.ok(/#modelsTable th,#modelsTable td\{white-space:nowrap;overflow:hidden;text-overflow:ellipsis\}/.test(html), '模型清单单元格不应换行');
 
+// 设置分类子导航与账号过滤条
+assert.ok(html.includes('class="settings-cat-bar"'), '设置页应有分类子导航栏');
+assert.ok(html.includes('data-cat="apikey"'), '设置分类应包含 API Key');
+assert.ok(html.includes('data-cat="proxy"'), '设置分类应包含代理网络');
+assert.ok(html.includes('data-cat="model"'), '设置分类应包含模型调度');
+assert.ok(html.includes('data-cat="security"'), '设置分类应包含安全隐私');
+assert.ok(html.includes('data-cat="system"'), '设置分类应包含系统高级');
+assert.ok(script.includes('function switchSettingsCategory('), '应定义 switchSettingsCategory 函数');
+assert.ok(script.includes('function restoreSettingsCategory('), '应定义 restoreSettingsCategory 函数');
+
+assert.ok(html.includes('class="acct-filter-bar"'), '账号页应有搜索与状态筛选栏');
+assert.ok(html.includes('id="acctSearchInput"'), '应有账号搜索框');
+assert.ok(html.includes('id="acctStatusFilters"'), '应有状态过滤按钮组');
+assert.ok(script.includes('function filterAccountsByStatus('), '应定义 filterAccountsByStatus 函数');
+assert.ok(script.includes('function filterAccountsList('), '应定义 filterAccountsList 函数');
+
 console.log('_test_ui_layout_refinements.js: all assertions passed');
