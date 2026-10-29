@@ -325,6 +325,9 @@ try:
           resp.url == srv.base() + "/ok" and resp.msg == resp.reason and resp.status == 200)
     resp.read()
     resp.close()
+    idle_conns = [c for conns in pool._POOL._idle.values() for c, _ in conns if c.sock]
+    check("出站连接已禁用 Nagle 算法（TCP_NODELAY 生效）",
+          len(idle_conns) > 0 and all(c.sock.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY) != 0 for c in idle_conns))
 
     # ------------------------------------------------------------------
     print("[2] 流式（chunked SSE）：读干净才归还，半截就丢弃")

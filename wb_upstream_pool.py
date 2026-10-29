@@ -37,6 +37,7 @@ import hashlib
 import http.client
 import io
 import os
+import socket
 import ssl
 import threading
 import time
@@ -327,9 +328,25 @@ class _PooledResponse(http.client.HTTPResponse):
 class _PooledHTTPConnection(http.client.HTTPConnection):
     response_class = _PooledResponse
 
+    def connect(self):
+        super().connect()
+        try:
+            if self.sock is not None:
+                self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except (OSError, AttributeError):
+            pass
+
 
 class _PooledHTTPSConnection(http.client.HTTPSConnection):
     response_class = _PooledResponse
+
+    def connect(self):
+        super().connect()
+        try:
+            if self.sock is not None:
+                self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except (OSError, AttributeError):
+            pass
 
 
 class _KeepAlivePool(object):
