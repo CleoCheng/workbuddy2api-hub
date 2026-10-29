@@ -495,6 +495,32 @@ class HealthTests(unittest.TestCase):
         self.rounds(2)
         self.assertEqual(self.nodes['g1'], old, 'Pinned slot must retain its node through ranked check')
 
+    def test_pinned_slot_auto_unpins_and_replaces_on_consecutive_failures(self):
+        self.ranked_fixture()
+        self.rounds(1)
+        node = self.nodes['g1']
+        S.update_proxy_slot(self.tmp.name, 'slot-1', {'pinned': True})
+        self.mon.rows['slot-1']['pinned'] = True
+        self.mon.rows['slot-1']['last_switch'] = 0
+        # One failure below the threshold keeps the pin and the selected node.
+        self.ips[node] = None
+        self.rounds(1)
+        self.assertEqual(self.mon.rows['slot-1']['failures'], 1)
+        self.assertEqual(self.nodes['g1'], node)
+        self.assertTrue(self.mon.rows['slot-1']['pinned'])
+        self.assertTrue(S.proxy_slots(self.tmp.name)[0]['pinned'])
+        # Reaching the threshold with a failed confirmation releases the pin
+        # and the slot is replaced within the same round.
+        self.rounds(1)
+        self.assertIn('auto_unpin', [h['reason'] for h in self.mon.history])
+        self.assertFalse(self.mon.rows['slot-1']['pinned'])
+        self.assertFalse(self.mon.rows['slot-1']['manual'])
+        self.assertFalse(S.proxy_slots(self.tmp.name)[0]['pinned'])
+        self.assertNotEqual(self.nodes['g1'], node)
+        self.assertEqual(self.mon.rows['slot-1']['status'], 'healthy')
+        self.assertTrue(self.mon.allow(self.slots[0]['url']))
+        self.assertEqual(self.mon.history[-1]['reason'], 'unavailable')
+
 
 class SubscriptionTests(unittest.TestCase):
     def setUp(self):
