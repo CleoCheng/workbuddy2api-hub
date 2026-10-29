@@ -13242,14 +13242,20 @@ def banned_model_message(model):
 
 
 def key_open_kwargs(entry):
-    """Open-upstream kwargs carrying a key's account restriction, if any.
+    """Open-upstream kwargs carrying a key's account restriction and identity, if any.
 
     The unrestricted path must not pass the keyword at all: test stubs and
     third-party pool implementations keep their old signature, and None is
     exactly "no restriction".
     """
+    out = {}
     allowed = wb_settings.key_allowed_accounts(entry)
-    return {"allowed_accounts": allowed} if allowed is not None else {}
+    if allowed is not None:
+        out["allowed_accounts"] = allowed
+    key_id = (entry or {}).get("name") or (entry or {}).get("id") or (entry or {}).get("key")
+    if key_id:
+        out["key_id"] = str(key_id).strip()
+    return out
 
 
 def key_model_message(entry, model):
@@ -14492,7 +14498,7 @@ def _free_model_credit_fallback_enabled():
 def open_upstream(payload, session_key=None, target_realm=None, prebuilt_body=None,
                   allow_credit_fallback=True, allow_product_switch=True,
                   pin_account=None, defer_egress_success=False,
-                  allowed_accounts=None):
+                  allowed_accounts=None, key_id=None):
     # Refresh the daily guards before picking. The scan underneath is
     # incremental and TTL-cached, so this is a stat() plus a cached dict on
     # the hot path, and an account parked by any of the guards is skipped
@@ -14546,6 +14552,11 @@ def open_upstream(payload, session_key=None, target_realm=None, prebuilt_body=No
         if session_key and AFFINITY_DEBUG:
             log("affinity: derived %s for %d msgs"
                 % (session_key, len(upstream_body.get("messages") or [])))
+    if session_key and key_id:
+        session_key = f"{key_id}:{session_key}"
+    if affinity_page and key_id and affinity_page[1] > 1:
+        salt = int(hashlib.sha256(str(key_id).encode("utf-8")).hexdigest()[:4], 16)
+        affinity_page = ((affinity_page[0] + salt) % affinity_page[1], affinity_page[1])
     # 一轮 user send 的 request id：官方 CLI 在这一轮的所有请求（含重试/换号）
     # 复用同一个 X-Conversation-Request-ID / X-Root-Request-ID，只有 message id
     # 每请求新生成（见 wb_identity.new_turn_request_id）。生成在重试循环外，
