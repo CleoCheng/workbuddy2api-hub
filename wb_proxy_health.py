@@ -493,6 +493,22 @@ class Monitor:
         if log:
             log('proxy health: %s %s' % (slot, reason))
 
+    def _release_pin(self, slots, slot, row):
+        """Release a pin after repeated failures plus an independent probe.
+
+        A pin means "keep this exit even when ranking would rotate", not
+        "keep using a dead exit": once the exit is proven unavailable the pin
+        is persisted as false and the slot re-enters the normal replacement
+        path on this same round.
+        """
+        wb_settings.update_proxy_slot(self.hub.ACCOUNTS_DIR, slot['id'], {'pinned': False})
+        slot['pinned'] = False
+        row['pinned'] = False
+        row['manual'] = False
+        slots[:] = wb_settings.proxy_slots(self.hub.ACCOUNTS_DIR)
+        self._record(slot['id'], 'auto_unpin', ip=row.get('ip', ''),
+                     failures=row.get('failures', 0))
+
     def _api(self, cfg, path, body=None):
         secret = (self.root / 'secret').read_text(encoding='utf-8').strip()
         req = urllib.request.Request(cfg['controller'] + path,
@@ -621,6 +637,8 @@ class Monitor:
                     continue
                 row['status'] = 'unavailable'
                 self._publish(rows)
+                if slot.get('pinned') or row.get('pinned'):
+                    self._release_pin(slots, slot, row)
                 if not proxy_map:
                     continue
                 if now - row.get('last_switch', 0) < cfg['cooldown']:
@@ -693,6 +711,11 @@ class Monitor:
                     row['ip_node'] = row['node']
                 else:
                     row['status'] = 'unavailable'
+                    if slot.get('pinned') or row.get('pinned'):
+                        self._release_pin(slots, slot, row)
+        # Releasing a pin rewrites the slot list; refresh the target objects so
+        # the replacement pass below sees the persisted state.
+        targets = [s for s in slots if s.get('enabled') and s['id'] in cfg['groups']]
         self._publish(rows)
         if not proxy_map:
             return
@@ -730,7 +753,9 @@ class Monitor:
                 probe = self._probe(slot['url'], cfg['timeout'])
                 if probe['ok']:
                     rows[slot['id']].update(probe, status='healthy', failures=0, last_success=time.time())
-        reserved = {rows[s['id']].get('ip') for s in slots if s not in targets or s.get('pinned') or rows[s['id']].get('pinned')}
+        reserved = {rows[s['id']].get('ip') for s in slots
+                    if (s not in targets or s.get('pinned') or rows[s['id']].get('pinned'))
+                    and rows[s['id']].get('status') != 'unavailable'}
         usable = [r for r in ranked if r['ip'] not in reserved]
         desired = usable[:len(targets)]
         desired_ips = {r['ip'] for r in desired}
@@ -739,7 +764,10 @@ class Monitor:
                 return
             row = rows[slot['id']]
             if slot.get('pinned') or row.get('pinned'):
-                continue
+                if row.get('status') == 'unavailable' and row.get('failures', 0) >= cfg['failures']:
+                    self._release_pin(slots, slot, row)
+                else:
+                    continue
             bad = row['status'] == 'unavailable'
             slow = row.get('slow_count', 0) >= cfg['slow_failures']
             peers = [rows[s['id']] for s in slots if s['id'] != slot['id']]
@@ -862,7 +890,10 @@ class Monitor:
         group = cfg['groups'][sid]
         row = rows[sid]
         if slot.get('pinned') or row.get('pinned'):
-            return
+            if row.get('status') == 'unavailable' and row.get('failures', 0) >= cfg['failures']:
+                self._release_pin(slots, slot, row)
+            else:
+                return
         old_node = proxy_map.get(group, {}).get('now')
         spare = proxy_map.get(cfg['probe_group'], {})
         production = proxy_map.get(group, {})
