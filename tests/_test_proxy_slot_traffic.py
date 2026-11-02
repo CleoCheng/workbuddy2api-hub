@@ -87,6 +87,10 @@ if m1_item:
 if m2_item:
     check("second month slot-1 total_tokens", m2_item["slots"].get("slot-1", {}).get("total_tokens") == 3500)
 
+res_m1 = ST.query(usage_dir, interval="month", period=m1_period)
+check("query with period returns period_totals", res_m1.get("period_totals", {}).get("slot-1", {}).get("total_tokens") == 4200)
+check("query with period echoes period", res_m1.get("period") == m1_period)
+
 # Query single slot filter
 res_slot1 = ST.query(usage_dir, interval="all", slot_id="slot-1")
 check("filtered query totals only slot-1", list(res_slot1.get("totals", {}).keys()) == ["slot-1"])

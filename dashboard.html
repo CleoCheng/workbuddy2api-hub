@@ -1571,6 +1571,14 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     "统计周期:": "Period:",
     "统计周期：": "Period:",
     "最近1小时": "Last 1h",
+    "代理槽统计": "Proxy Slot Statistics",
+    "按代理槽汇总流量与 Token 消耗": "Summarize traffic and tokens by proxy slot",
+    "上行流量": "Upload",
+    "下行流量": "Download",
+    "总流量": "Total traffic",
+    "平均请求": "Avg / req",
+    "暂无代理槽数据": "No proxy slot data available",
+    "「Token 消耗」与「流量消耗」统计该代理槽累计代理的请求与流量，悬停可查看上行、下行与 Token 明细；按周期统计可在「数据看板」中查看。": "'Token usage' and 'Traffic' display cumulative requests and network traffic proxied through each slot. Hover to view detailed breakdown; see Data Analytics for periodic breakdowns.",
     "「Token 消耗」与「流量消耗」按选定周期（全部/本月/今天/最近1小时）汇总该代理槽代理的请求量，悬停可查看上行、下行与 Token 明细。": "'Token usage' and 'Traffic' summarize the requests proxied through each slot over the selected period (All/Month/Today/Last 1h). Hover to view detailed breakdown.",
     "代理槽对应 Mihomo 监听端口，不等于订阅节点数；一个出口组可以引用两个订阅的全部节点。扩展槽位需先新增监听端口并调整发现范围，独立探测端口不应导入账号槽位。": "Proxy slots are Mihomo listeners, not subscription nodes. Each exit group can use both subscriptions. Add listeners and adjust the discovery range to expand slots; never import the dedicated probe listener.",
     "请先保存槽位，再测试全部端口。": "Save proxy slots before testing all ports.",
@@ -5224,7 +5232,28 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     </div>
   </section>
 
-  <!-- ====================== ⑤ 折叠区 ====================== -->
+  <!-- ====================== ⑤ 代理槽流量与 Token 统计 ====================== -->
+  <section class="panel" id="panelSlotTraffic">
+    <div class="phead">
+      <h2>代理槽统计</h2>
+      <span class="hint" id="analyticsSlotTrafficHint">按代理槽汇总流量与 Token 消耗</span>
+      <div class="spacer"></div>
+      <div class="seg mini" id="analyticsSlotTrafficSeg">
+        <button type="button" class="on" data-interval="all" onclick="setAnalyticsSlotTrafficInterval('all', this)">全部</button>
+        <button type="button" data-interval="month" onclick="setAnalyticsSlotTrafficInterval('month', this)">本月</button>
+        <button type="button" data-interval="day" onclick="setAnalyticsSlotTrafficInterval('day', this)">今天</button>
+        <button type="button" data-interval="hour" onclick="setAnalyticsSlotTrafficInterval('hour', this)">最近1小时</button>
+      </div>
+      <button class="sec mini" onclick="loadAnalyticsSlotTraffic(true)" style="margin-left:6px">刷新</button>
+    </div>
+    <div class="pbody" style="overflow-x:auto">
+      <div id="analyticsSlotTrafficBox">
+        <div class="empty">加载中…</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ====================== ⑥ 折叠区 ====================== -->
   <div class="folds">
     <details class="fold" id="foldRemainBox">
       <summary><h2>剩余用量估算</h2><span class="chev">▶</span></summary>
@@ -5562,18 +5591,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
           <button onclick="saveProxySlots(this)">保存槽位</button>
         </div>
       </div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0 6px 0;flex-wrap:wrap;gap:8px">
-        <p class="hint" style="margin:0;flex:1;min-width:300px">代理槽对应 Mihomo 监听端口，不等于订阅节点数；一个出口组可以引用两个订阅的全部节点。扩展槽位需先新增监听端口并调整发现范围，独立探测端口不应导入账号槽位。</p>
-        <div style="display:flex;align-items:center;gap:6px">
-          <span style="font-size:12px;color:var(--dim)">统计周期:</span>
-          <div class="seg mini" id="slotTrafficSeg">
-            <button type="button" class="on" data-interval="all" onclick="setSlotTrafficInterval('all', this)">全部</button>
-            <button type="button" data-interval="month" onclick="setSlotTrafficInterval('month', this)">本月</button>
-            <button type="button" data-interval="day" onclick="setSlotTrafficInterval('day', this)">今天</button>
-            <button type="button" data-interval="hour" onclick="setSlotTrafficInterval('hour', this)">最近1小时</button>
-          </div>
-        </div>
-      </div>
+      <p class="hint" style="margin:10px 0 6px 0">代理槽对应 Mihomo 监听端口，不等于订阅节点数；一个出口组可以引用两个订阅的全部节点。扩展槽位需先新增监听端口并调整发现范围，独立探测端口不应导入账号槽位。</p>
       <div id="slotBatchState" role="status" style="font-size:12px;margin:10px 0" hidden></div>
       <div id="slotList"></div>
       <div id="slotDiscover"></div>
@@ -15805,8 +15823,9 @@ async function setAccountSlot(uid, slotId, el){
   }
 }
 
-let SLOT_TRAFFIC_INTERVAL = 'all';
-let SLOT_TRAFFIC_DATA = null;
+let ANALYTICS_SLOT_INTERVAL = 'all';
+let ANALYTICS_SLOT_DATA = null;
+let ANALYTICS_SLOT_LOADING = false;
 
 function fmtSlotNum(v){
   if(v == null || !isFinite(v)) return '—';
@@ -15832,23 +15851,147 @@ function fmtTrafficBytes(bytes){
   return b + ' B';
 }
 
-async function setSlotTrafficInterval(interval, btn){
-  SLOT_TRAFFIC_INTERVAL = interval;
-  const seg = document.getElementById('slotTrafficSeg');
+async function setAnalyticsSlotTrafficInterval(interval, btn){
+  ANALYTICS_SLOT_INTERVAL = interval;
+  const seg = document.getElementById('analyticsSlotTrafficSeg');
   if(seg){
     Array.from(seg.querySelectorAll('button')).forEach(b => {
       b.classList.toggle('on', b === btn || b.getAttribute('data-interval') === interval);
     });
   }
-  try {
-    const res = await getJSON('/proxy/slots/traffic?interval=' + encodeURIComponent(interval));
-    if(res && res.totals){
-      SLOT_TRAFFIC_DATA = res;
-      renderProxySlots();
-    }
-  } catch(e) {
-    console.error('failed to fetch slot traffic:', e);
+  await loadAnalyticsSlotTraffic(true);
+}
+
+async function loadAnalyticsSlotTraffic(force){
+  if(ANALYTICS_SLOT_LOADING && !force) return;
+  ANALYTICS_SLOT_LOADING = true;
+  try{
+    const [slotsRes, trafficRes] = await Promise.all([
+      (typeof PROXY_SLOTS !== 'undefined' && PROXY_SLOTS && PROXY_SLOTS.length)
+        ? Promise.resolve({slots: PROXY_SLOTS})
+        : getJSON('/proxy/slots').catch(() => ({slots:[]})),
+      getJSON('/proxy/slots/traffic?interval=' + encodeURIComponent(ANALYTICS_SLOT_INTERVAL)).catch(() => null)
+    ]);
+    if(slotsRes && slotsRes.slots) PROXY_SLOTS = slotsRes.slots;
+    ANALYTICS_SLOT_DATA = trafficRes;
+    renderAnalyticsSlotTraffic();
+  }catch(e){
+    console.error('loadAnalyticsSlotTraffic error:', e);
+  }finally{
+    ANALYTICS_SLOT_LOADING = false;
   }
+}
+
+function renderAnalyticsSlotTraffic(){
+  const box = document.getElementById('analyticsSlotTrafficBox');
+  if(!box) return;
+  const hintEl = document.getElementById('analyticsSlotTrafficHint');
+  const tr = ANALYTICS_SLOT_DATA;
+  const intervalNames = {all: '历史累计', month: '本月', day: '今日', hour: '最近1小时'};
+  const periodLabel = tr && tr.period && tr.period !== 'all' ? (' · ' + tr.period) : '';
+  if(hintEl){
+    hintEl.textContent = '按代理槽汇总流量与 Token 消耗（' + (intervalNames[ANALYTICS_SLOT_INTERVAL] || '全部') + periodLabel + '）';
+  }
+
+  const periodTotals = (tr && (tr.period_totals || tr.totals)) || {};
+  const grandTotals = (tr && tr.totals) || {};
+  const slots = (typeof PROXY_SLOTS !== 'undefined' && PROXY_SLOTS) ? PROXY_SLOTS : [];
+
+  const slotMap = new Map();
+  slots.forEach(s => { if(s && s.id) slotMap.set(s.id, s); });
+  Object.keys(periodTotals).forEach(sid => {
+    if(!slotMap.has(sid)) slotMap.set(sid, {id: sid, name: '', enabled: true, bound: 0});
+  });
+  Object.keys(grandTotals).forEach(sid => {
+    if(!slotMap.has(sid)) slotMap.set(sid, {id: sid, name: '', enabled: true, bound: 0});
+  });
+
+  if(slotMap.size === 0){
+    box.innerHTML = '<div class="empty" style="padding:24px;text-align:center;color:var(--dim)">暂无代理槽数据（可在设置页「网络与代理 → 账号代理槽」中配置并启用代理槽）</div>';
+    return;
+  }
+
+  const sortedSlots = Array.from(slotMap.values()).sort((a,b) => String(a.id).localeCompare(String(b.id)));
+  let totalReqs = 0, totalPt = 0, totalCt = 0, totalTt = 0;
+  let totalBi = 0, totalBo = 0, totalBt = 0;
+
+  const rowsHtml = sortedSlots.map(s => {
+    const sid = s.id;
+    const st = periodTotals[sid] || {};
+    const reqs = Number(st.requests || 0);
+    const pt = Number(st.prompt_tokens || 0);
+    const ct = Number(st.completion_tokens || 0);
+    const tt = Number(st.total_tokens || (pt + ct));
+    const bi = Number(st.bytes_in || 0);
+    const bo = Number(st.bytes_out || 0);
+    const bt = Number(st.bytes_total || (bi + bo));
+    const avgB = reqs > 0 ? Math.round(bt / reqs) : 0;
+
+    totalReqs += reqs;
+    totalPt += pt;
+    totalCt += ct;
+    totalTt += tt;
+    totalBi += bi;
+    totalBo += bo;
+    totalBt += bt;
+
+    const exitText = (s.ip ? s.ip : '') + (s.country ? (' ' + s.country) : '');
+    const nameText = s.name || autoSlotName(s) || s.id;
+    const group = s.group || slotGroupTag(s);
+    const groupBadge = group ? '<span class="badge" style="font-size:10px;margin-left:4px">' + esc(group) + '</span>' : '';
+
+    return '<tr>'
+      + '<td data-label="代理槽" style="white-space:nowrap"><strong class="mono">' + esc(sid) + '</strong>' + groupBadge + '</td>'
+      + '<td data-label="名称 / 出口" style="font-size:12px">'
+      +   '<div style="font-weight:500">' + esc(nameText) + '</div>'
+      +   '<div class="mono" style="font-size:11px;color:var(--dim)">' + esc(exitText || s.url || '—') + '</div>'
+      + '</td>'
+      + '<td class="num" data-label="绑定账号" data-sort="' + (s.bound || 0) + '">' + (s.bound || 0) + '</td>'
+      + '<td class="num" data-label="请求数" data-sort="' + reqs + '">' + fmtSlotNum(reqs) + '</td>'
+      + '<td class="num" data-label="Prompt" data-sort="' + pt + '">' + fmtSlotTok(pt) + '</td>'
+      + '<td class="num" data-label="Completion" data-sort="' + ct + '">' + fmtSlotTok(ct) + '</td>'
+      + '<td class="num" data-label="Token 总量" data-sort="' + tt + '"><strong style="color:var(--fg)">' + fmtSlotTok(tt) + '</strong></td>'
+      + '<td class="num" data-label="上行流量" data-sort="' + bi + '">' + fmtTrafficBytes(bi) + '</td>'
+      + '<td class="num" data-label="下行流量" data-sort="' + bo + '">' + fmtTrafficBytes(bo) + '</td>'
+      + '<td class="num" data-label="总流量" data-sort="' + bt + '"><strong style="color:var(--fg)">' + fmtTrafficBytes(bt) + '</strong></td>'
+      + '<td class="num" data-label="平均请求" data-sort="' + avgB + '">' + (reqs > 0 ? fmtTrafficBytes(avgB) : '—') + '</td>'
+      + '</tr>';
+  }).join('');
+
+  const grandAvgB = totalReqs > 0 ? Math.round(totalBt / totalReqs) : 0;
+  const tfootHtml = '<tfoot>'
+    + '<tr style="font-weight:600;background:var(--panel2);border-top:2px solid var(--line)">'
+    + '<td colspan="2" style="text-align:left">合计（' + sortedSlots.length + ' 个代理槽）</td>'
+    + '<td class="num" data-sort="0">—</td>'
+    + '<td class="num" data-sort="' + totalReqs + '">' + fmtSlotNum(totalReqs) + '</td>'
+    + '<td class="num" data-sort="' + totalPt + '">' + fmtSlotTok(totalPt) + '</td>'
+    + '<td class="num" data-sort="' + totalCt + '">' + fmtSlotTok(totalCt) + '</td>'
+    + '<td class="num" data-sort="' + totalTt + '"><strong style="color:var(--fg)">' + fmtSlotTok(totalTt) + '</strong></td>'
+    + '<td class="num" data-sort="' + totalBi + '">' + fmtTrafficBytes(totalBi) + '</td>'
+    + '<td class="num" data-sort="' + totalBo + '">' + fmtTrafficBytes(totalBo) + '</td>'
+    + '<td class="num" data-sort="' + totalBt + '"><strong style="color:var(--accent)">' + fmtTrafficBytes(totalBt) + '</strong></td>'
+    + '<td class="num" data-sort="' + grandAvgB + '">' + (totalReqs > 0 ? fmtTrafficBytes(grandAvgB) : '—') + '</td>'
+    + '</tr></tfoot>';
+
+  box.innerHTML = '<table class="dim data-cards" id="analyticsSlotTrafficTable">'
+    + '<thead><tr>'
+    + '<th style="min-width:90px">代理槽</th>'
+    + '<th style="min-width:140px">名称 / 出口</th>'
+    + '<th class="num" style="min-width:70px">绑定账号</th>'
+    + '<th class="num" style="min-width:70px">请求数</th>'
+    + '<th class="num" style="min-width:85px">Prompt</th>'
+    + '<th class="num" style="min-width:85px">Completion</th>'
+    + '<th class="num" style="min-width:90px">Token 总量</th>'
+    + '<th class="num" style="min-width:85px">上行流量</th>'
+    + '<th class="num" style="min-width:85px">下行流量</th>'
+    + '<th class="num" style="min-width:85px">总流量</th>'
+    + '<th class="num" style="min-width:80px">平均请求</th>'
+    + '</tr></thead>'
+    + '<tbody>' + rowsHtml + '</tbody>'
+    + tfootHtml
+    + '</table>';
+
+  applyTableSort('analyticsSlotTrafficTable');
 }
 
 async function loadProxySlots(force){
@@ -15859,12 +16002,6 @@ async function loadProxySlots(force){
   try{
     const r = await getJSON('/proxy/slots');
     PROXY_SLOTS = r.slots || [];
-    if(SLOT_TRAFFIC_INTERVAL !== 'all'){
-      try{
-        const tr = await getJSON('/proxy/slots/traffic?interval=' + encodeURIComponent(SLOT_TRAFFIC_INTERVAL));
-        if(tr && tr.totals) SLOT_TRAFFIC_DATA = tr;
-      }catch(_){}
-    }
     renderProxySlots();
   }catch(e){
     // Panel not logged in yet; actions on the settings page surface errors.
@@ -16110,7 +16247,7 @@ function renderProxySlots(){
         const tag = slotGroupTag(s);
         if(tag && !s.group) s.group = tag;
         s.label = s.name || autoSlotName(s) || s.id;
-        const stats = (SLOT_TRAFFIC_DATA && SLOT_TRAFFIC_DATA.totals && SLOT_TRAFFIC_DATA.totals[s.id]) || s.stats || {};
+        const stats = s.stats || {};
         const totalTok = stats.total_tokens || 0;
         const promptTok = stats.prompt_tokens || 0;
         const compTok = stats.completion_tokens || 0;
@@ -16145,7 +16282,7 @@ function renderProxySlots(){
     + '</tbody></table></div>'
     + '<div class="legend slot-latency-legend"><span class="slot-latency slot-latency-ok">≤300 ms</span><span class="slot-latency slot-latency-warn">301–800 ms</span><span class="slot-latency slot-latency-bad">&gt;800 ms / 不可用</span><span>延迟为代理 HTTPS 探测耗时，不代表模型响应速度；悬停查看探测时间。</span></div>'
     + '<div class="legend"><span>「绑定账号」只统计已启用账号；停用账号会自动释放槽位，重新启用后需重新绑定。在网关页账号表的「出口」下拉中调整绑定。名称留空时按出口自动显示「国家 类型」，点「测试」会补全出口信息并据此命名。</span>'
-    + ' <span>「Token 消耗」与「流量消耗」按选定周期（全部/本月/今天/最近1小时）汇总该代理槽代理的请求量，悬停可查看上行、下行与 Token 明细。</span>'
+    + ' <span>「Token 消耗」与「流量消耗」统计该代理槽累计代理的请求与流量，悬停可查看上行、下行与 Token 明细；按周期统计可在「数据看板」中查看。</span>'
     + ' <span>「账号上限」设置单个代理槽最多代理的账号数量（填 0 或留空为不限），可在表头点击「统一」批量设置；一键分配代理时超出上限的账号将顺延分配至后续可用槽位。</span>'
     + ' <span>' + slotBatchText('「固定」可锁定该代理槽当前使用的节点，定期测速后不随排名自动轮转；自动调整未固定槽位时，优先使用相同地区的低延迟节点替换，以防异地风控。') + '</span></div>';
   applyTableSort('slotList');
@@ -16894,7 +17031,7 @@ function switchMainTab(tab){
   if(frame) frame.style.display = 'none';
   if(tab === 'tasks'){ loadGrowthTasks(); }
   if(tab === 'accounts' || (!_accountsSeparateTab && tab === 'gateway')){ loadActivityBoard(); }
-  if(tab === 'analytics'){ loadAnalytics(); loadAnalyticsMatrix(); }
+  if(tab === 'analytics'){ loadAnalytics(); loadAnalyticsMatrix(); try{ loadAnalyticsSlotTraffic(); }catch(e){} }
   if(tab === 'settings'){ loadSettings(); loadProxySlots(); }
   if(tab === 'agents'){ loadAgents(); }
   if(tab === 'logs'){
@@ -18976,6 +19113,7 @@ async function loadStatic(){
   try{ loadRemainingUsage(); }catch(e){}
   try{ loadCreditHistory(); }catch(e){}
   try{ loadCreditGrants(); }catch(e){}
+  try{ loadAnalyticsSlotTraffic(); }catch(e){}
 }
 
 /* 热力图按「本地日」取数：since/until 都钉在本地午夜，缓存键一整天不变；

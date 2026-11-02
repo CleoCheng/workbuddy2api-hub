@@ -20924,13 +20924,14 @@ class Handler(BaseHTTPRequestHandler):
         interval = (query.get("interval") or ["all"])[0] if isinstance(query, dict) else "all"
         slot_id = (query.get("slot") or [None])[0] if isinstance(query, dict) else None
         limit_val = (query.get("limit") or [None])[0] if isinstance(query, dict) else None
+        period = (query.get("period") or [None])[0] if isinstance(query, dict) else None
         limit = None
         if limit_val is not None:
             try:
                 limit = int(limit_val)
             except Exception:
                 limit = None
-        data = wb_slot_traffic.query(USAGE_DIR, interval=interval, slot_id=slot_id, limit=limit)
+        data = wb_slot_traffic.query(USAGE_DIR, interval=interval, slot_id=slot_id, limit=limit, period=period)
         return self._json(200, data)
 
     def _handle_proxy_slots(self, path, payload):
@@ -20940,13 +20941,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/proxy/slots/traffic":
             interval = payload.get("interval", "all")
             slot_id = payload.get("slot")
+            period = payload.get("period")
             limit = payload.get("limit")
             if limit is not None:
                 try:
                     limit = int(limit)
                 except Exception:
                     limit = None
-            data = wb_slot_traffic.query(USAGE_DIR, interval=interval, slot_id=slot_id, limit=limit)
+            data = wb_slot_traffic.query(USAGE_DIR, interval=interval, slot_id=slot_id, limit=limit, period=period)
             return self._json(200, data)
         if path == "/proxy/slots/save":
             raw = payload.get("slots")

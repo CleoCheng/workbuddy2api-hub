@@ -57,6 +57,10 @@ const api = new Function(script + `
     cancelHealthScan,fmtSubInterval,
     setSlotMaxAccounts,batchSetSlotMaxAccounts,autoAssignSlots,slotPayload,togglePinSlot,
     slotSelectHtml,slotExitHtml,autoSlotName,slotGroupTag,
+    renderAnalyticsSlotTraffic,setAnalyticsSlotTrafficInterval,loadAnalyticsSlotTraffic,
+    analyticsData: d => { ANALYTICS_SLOT_DATA = d; },
+    analyticsInterval: () => ANALYTICS_SLOT_INTERVAL,
+    fmtTrafficBytes,fmtSlotTok,fmtSlotNum,
     batchFixture: rows => {PROXY_SLOTS=rows;SLOTS_DIRTY=false;},
     manualProbe:(url,row)=>SLOT_MANUAL_PROBES.set(url,row),
     healthDirty: value => { PROXY_HEALTH_DIRTY = value; },
@@ -366,6 +370,49 @@ const api = new Function(script + `
   assert.ok(exitHtml.includes('38.58.56.34'), 'slotExitHtml displays IP');
   assert.ok(exitHtml.includes('[B]'), 'slotExitHtml displays subscription group badge');
   assert.equal(api.autoSlotName(api.rows()[0]), '美国 住宅 [B]', 'autoSlotName includes subscription group');
+
+  // Traffic & token formatting helpers
+  assert.equal(api.fmtTrafficBytes(0), '0 B');
+  assert.equal(api.fmtTrafficBytes(1024), '1.0 KB');
+  assert.equal(api.fmtTrafficBytes(1048576 * 2.5), '2.5 MB');
+  assert.equal(api.fmtTrafficBytes(1073741824 * 1.5), '1.50 GB');
+  assert.equal(api.fmtSlotTok(0), '0');
+  assert.equal(api.fmtSlotTok(1500), '1.5K');
+  assert.equal(api.fmtSlotTok(2500000), '2.5M');
+
+  // Analytics slot traffic rendering
+  api.batchFixture([
+    {id: 'slot-1', name: 'Tokyo 01', url: 'http://127.0.0.1:18001', enabled: true, bound: 2, ip: '198.51.100.1', country: '日本'},
+    {id: 'slot-2', name: 'US 02', url: 'http://127.0.0.1:18002', enabled: true, bound: 1, ip: '198.51.100.2', country: '美国'},
+  ]);
+  api.analyticsData({
+    interval: 'month',
+    period: '2026-11',
+    period_totals: {
+      'slot-1': {requests: 120, prompt_tokens: 15000, completion_tokens: 3000, total_tokens: 18000, bytes_in: 45000, bytes_out: 15000, bytes_total: 60000},
+      'slot-2': {requests: 80, prompt_tokens: 8000, completion_tokens: 2000, total_tokens: 10000, bytes_in: 25000, bytes_out: 10000, bytes_total: 35000},
+    },
+    totals: {
+      'slot-1': {requests: 500, prompt_tokens: 50000, completion_tokens: 10000, total_tokens: 60000, bytes_in: 150000, bytes_out: 50000, bytes_total: 200000},
+      'slot-2': {requests: 300, prompt_tokens: 30000, completion_tokens: 5000, total_tokens: 35000, bytes_in: 90000, bytes_out: 30000, bytes_total: 120000},
+    }
+  });
+
+  const boxEl = global.document.getElementById('analyticsSlotTrafficBox');
+  api.renderAnalyticsSlotTraffic();
+  assert.ok(boxEl.innerHTML.includes('analyticsSlotTrafficTable'), 'renders analytics slot traffic table');
+  assert.ok(boxEl.innerHTML.includes('Tokyo 01'), 'renders slot name in analytics table');
+  assert.ok(boxEl.innerHTML.includes('18K'), 'renders formatted tokens in analytics table');
+  assert.ok(boxEl.innerHTML.includes('58.6 KB'), 'renders formatted bytes in analytics table');
+  assert.ok(boxEl.innerHTML.includes('合计'), 'renders summary footer row');
+
+  // Interval switching
+  const segEl = global.document.getElementById('analyticsSlotTrafficSeg');
+  const btnDay = dom.makeElement('button');
+  btnDay.setAttribute('data-interval', 'day');
+  segEl.appendChild(btnDay);
+  await api.setAnalyticsSlotTrafficInterval('day', btnDay);
+  assert.equal(api.analyticsInterval(), 'day', 'setAnalyticsSlotTrafficInterval updates interval');
 
   console.log('slot editor assertions passed');
 })().catch(error => { console.error(error); process.exit(1); });

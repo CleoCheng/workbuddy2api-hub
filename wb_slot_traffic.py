@@ -104,15 +104,16 @@ def record(usage_dir, slot_id, prompt_tokens=0, completion_tokens=0, total_token
             """, (slot_id, hour, pt, ct, tt, bi, bo))
 
 
-def query(usage_dir, interval="all", slot_id=None, limit=None):
+def query(usage_dir, interval="all", slot_id=None, limit=None, period=None):
     """Query aggregated traffic and token statistics.
 
     interval: 'all' | 'month' | 'day' | 'hour'
     slot_id: optional filter for a single slot (e.g. 'slot-1')
     limit: optional max count of series periods returned
+    period: optional target period string (e.g. '2026-11'); defaults to current period
     """
     if not usage_dir:
-        return {"interval": interval, "totals": {}, "series": []}
+        return {"interval": interval, "period": "all", "totals": {}, "period_totals": {}, "series": []}
 
     conn = _get_conn(usage_dir)
     params = []
@@ -153,13 +154,20 @@ def query(usage_dir, interval="all", slot_id=None, limit=None):
 
         # 2. Compute series if interval != 'all'
         series = []
+        target_period = "all"
+        period_totals = totals
         if interval in ("month", "day", "hour"):
             if interval == "month":
                 sub_len = 7   # YYYY-MM
+                cur_period = time.strftime("%Y-%m")
             elif interval == "day":
                 sub_len = 10  # YYYY-MM-DD
+                cur_period = time.strftime("%Y-%m-%d")
             else:
                 sub_len = 13  # YYYY-MM-DD-HH
+                cur_period = time.strftime("%Y-%m-%d-%H")
+
+            target_period = str(period).strip() if period else cur_period
 
             series_sql = f"""
                 SELECT substr(hour, 1, {sub_len}) AS period,
@@ -200,7 +208,15 @@ def query(usage_dir, interval="all", slot_id=None, limit=None):
             for p in period_order:
                 series.append({"period": p, "slots": by_period[p]})
 
-        return {"interval": interval, "totals": totals, "series": series}
+            period_totals = by_period.get(target_period, {})
+
+        return {
+            "interval": interval,
+            "period": target_period,
+            "totals": totals,
+            "period_totals": period_totals,
+            "series": series
+        }
 
 
 def backfill_from_usage(usage_dir, accounts_dir, force=False):
