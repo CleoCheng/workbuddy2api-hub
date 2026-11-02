@@ -311,7 +311,19 @@ pool4.apply_proxy_slots()
 check("disabled slot falls back to legacy", fresh.proxy == "http://fallback:9", fresh.proxy)
 
 print()
-print("[13] new account automatically assigned an eligible slot")
+print("[13] proxy url normalization (issue #648)")
+check("ip:port:user:pass normalized",
+      S.normalize_proxy_url("127.0.0.1:8080:myuser:mypass") == "http://myuser:mypass@127.0.0.1:8080")
+check("http://ip:port:user:pass normalized",
+      S.normalize_proxy_url("http://127.0.0.1:8080:myuser:mypass") == "http://myuser:mypass@127.0.0.1:8080")
+check("user:pass@ip:port gains scheme",
+      S.normalize_proxy_url("myuser:mypass@127.0.0.1:8080") == "http://myuser:mypass@127.0.0.1:8080")
+check("standard url untouched",
+      S.normalize_proxy_url("http://myuser:mypass@127.0.0.1:8080") == "http://myuser:mypass@127.0.0.1:8080")
+
+print()
+
+print("[14] new account automatically assigned an eligible slot")
 d_auto = os.path.join(_TMP.name, "auto_slot")
 S.set_proxy_slots(d_auto, [
     {"id": "slot-1", "name": "one", "url": "http://slot:1", "max_accounts": 1},

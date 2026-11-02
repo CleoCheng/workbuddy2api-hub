@@ -435,7 +435,23 @@ def ensure_launcher_key(accounts_dir):
 # Each key can be bound to one upstream realm, so several clients can hit
 # different exits at the same time instead of sharing the global switch.
 
-REALMS = ("", "intl", "cn")
+REALMS = ("", "intl", "cn", "codearts")
+
+
+def codearts_config(accounts_dir):
+    """CodeArts 配置的薄包装，避免 wb_settings ↔ wb_codearts 的模块级循环。"""
+    import wb_codearts
+    return wb_codearts.load_config(accounts_dir)
+
+
+def set_codearts_config(accounts_dir, patch):
+    import wb_codearts
+    return wb_codearts.save_config(accounts_dir, patch)
+
+
+def codearts_configured(accounts_dir):
+    import wb_codearts
+    return wb_codearts.configured(accounts_dir)
 
 
 def _clean_model_patterns(value):
@@ -1627,6 +1643,21 @@ def set_upstream_config(accounts_dir, cfg):
         data["upstream"] = deep_merge(data.get("upstream"), clean)
         save(accounts_dir, data)
     return clean
+
+
+def max_payload_mb(accounts_dir):
+    value = load(accounts_dir).get("max_payload_mb")
+    return value if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= 256 else None
+
+
+def set_max_payload_mb(accounts_dir, value):
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 256:
+        raise ValueError("max_payload_mb must be an integer between 1 and 256")
+    with _lock:
+        data = load(accounts_dir)
+        data["max_payload_mb"] = value
+        save(accounts_dir, data)
+    return value
 
 
 USAGE_DEFAULTS = {
@@ -2933,6 +2964,29 @@ def set_quota_scan_models(accounts_dir, models):
 _SLOT_ID_RE = re.compile(r"^slot-(\d+)$")
 
 
+def normalize_proxy_url(url):
+    """Normalize user/vendor proxy input into standard http://[user:pass@]host:port.
+
+    Supports:
+      - host:port:user:pass or http://host:port:user:pass (vendor format)
+      - user:pass@host:port (adds missing http:// scheme)
+      - standard http://user:pass@host:port or http://host:port
+    """
+    raw = str(url or "").strip()
+    if not raw:
+        return ""
+    scheme = "http"
+    if "://" in raw:
+        s, _, rest = raw.partition("://")
+        scheme = s.strip().lower() or "http"
+        raw = rest.strip()
+    parts = raw.split(":")
+    if len(parts) == 4 and parts[1].isdigit():
+        host, port, user, password = parts[0], parts[1], parts[2], parts[3]
+        return "%s://%s:%s@%s:%s" % (scheme, user, password, host, port)
+    return "%s://%s" % (scheme, raw)
+
+
 def _clean_slot_entry(entry, fallback_id=None):
     """Normalize one stored slot; returns None when unusable.
 
@@ -2943,7 +2997,7 @@ def _clean_slot_entry(entry, fallback_id=None):
     """
     if not isinstance(entry, dict):
         return None
-    url = str(entry.get("url") or "").strip()
+    url = normalize_proxy_url(entry.get("url"))
     if not url:
         return None
     slot_id = str(entry.get("id") or "").strip()

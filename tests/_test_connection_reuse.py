@@ -342,8 +342,9 @@ try:
             check("a peer that %s fails the read" % stall, raised)
             # Loose on purpose: the ceiling only has to separate "gave up" from
             # "hung", and a loaded runner may be slow to schedule the wakeup.
+            # Windows timer resolution (~15ms jitter) can trigger timeout at ~0.48s.
             check("and gives up on its deadline, not eventually",
-                  0.5 <= waited < 8.0, "%.2fs" % waited)
+                  0.45 <= waited < 8.0, "%.2fs" % waited)
     finally:
         quiet.close()
         silent.close()
