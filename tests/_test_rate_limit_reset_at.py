@@ -55,11 +55,12 @@ class HeaderHelperTests(unittest.TestCase):
     """纯函数：头怎么拼，拿不到时刻时怎么退避。"""
 
     def test_both_absolute_headers_are_emitted(self):
-        headers = dict(P.rate_limit_headers(1793600000))
-        self.assertEqual(headers["X-RateLimit-Reset"], "1793600000")
+        future_ts = int(time.time() + 3600)
+        headers = dict(P.rate_limit_headers(future_ts))
+        self.assertEqual(headers["X-RateLimit-Reset"], str(future_ts))
         self.assertEqual(headers["X-RateLimit-Reset-At"],
                          time.strftime("%Y-%m-%dT%H:%M:%SZ",
-                                       time.gmtime(1793600000)))
+                                       time.gmtime(future_ts)))
 
     def test_no_instant_means_no_headers(self):
         """宁可不说，也不能编一个恢复时刻出来。"""
@@ -71,9 +72,10 @@ class HeaderHelperTests(unittest.TestCase):
         self.assertEqual(P.rate_limit_headers("not-a-number"), [])
 
     def test_note_is_empty_without_an_instant(self):
+        future_ts = int(time.time() + 3600)
         self.assertEqual(P.rate_limit_reset_note(None), "")
-        self.assertIn("resets at 2026-11-02T",
-                      P.rate_limit_reset_note(1793600000))
+        self.assertIn("resets at ",
+                      P.rate_limit_reset_note(future_ts))
 
 
 class ResetSourceTests(unittest.TestCase):

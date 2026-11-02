@@ -50,6 +50,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Superpowers plans
+docs/superpowers/
+
 # 系统与编辑器文件
 .DS_Store
 Thumbs.db

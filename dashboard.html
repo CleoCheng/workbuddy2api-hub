@@ -1567,6 +1567,11 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     "冷却/限流": "Cooldown",
     "批量测试进行中，请稍后保存槽位。": "Batch test is running. Save slots after it finishes.",
     "一键测试全部槽位": "Test all proxy slots",
+    "流量消耗": "Traffic",
+    "统计周期:": "Period:",
+    "统计周期：": "Period:",
+    "最近1小时": "Last 1h",
+    "「Token 消耗」与「流量消耗」按选定周期（全部/本月/今天/最近1小时）汇总该代理槽代理的请求量，悬停可查看上行、下行与 Token 明细。": "'Token usage' and 'Traffic' summarize the requests proxied through each slot over the selected period (All/Month/Today/Last 1h). Hover to view detailed breakdown.",
     "代理槽对应 Mihomo 监听端口，不等于订阅节点数；一个出口组可以引用两个订阅的全部节点。扩展槽位需先新增监听端口并调整发现范围，独立探测端口不应导入账号槽位。": "Proxy slots are Mihomo listeners, not subscription nodes. Each exit group can use both subscriptions. Add listeners and adjust the discovery range to expand slots; never import the dedicated probe listener.",
     "请先保存槽位，再测试全部端口。": "Save proxy slots before testing all ports.",
     "还没有可测试的代理槽。": "No proxy slots to test.",
@@ -5557,7 +5562,18 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
           <button onclick="saveProxySlots(this)">保存槽位</button>
         </div>
       </div>
-      <p class="hint">代理槽对应 Mihomo 监听端口，不等于订阅节点数；一个出口组可以引用两个订阅的全部节点。扩展槽位需先新增监听端口并调整发现范围，独立探测端口不应导入账号槽位。</p>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:10px 0 6px 0;flex-wrap:wrap;gap:8px">
+        <p class="hint" style="margin:0;flex:1;min-width:300px">代理槽对应 Mihomo 监听端口，不等于订阅节点数；一个出口组可以引用两个订阅的全部节点。扩展槽位需先新增监听端口并调整发现范围，独立探测端口不应导入账号槽位。</p>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:12px;color:var(--dim)">统计周期:</span>
+          <div class="seg mini" id="slotTrafficSeg">
+            <button type="button" class="on" data-interval="all" onclick="setSlotTrafficInterval('all', this)">全部</button>
+            <button type="button" data-interval="month" onclick="setSlotTrafficInterval('month', this)">本月</button>
+            <button type="button" data-interval="day" onclick="setSlotTrafficInterval('day', this)">今天</button>
+            <button type="button" data-interval="hour" onclick="setSlotTrafficInterval('hour', this)">最近1小时</button>
+          </div>
+        </div>
+      </div>
       <div id="slotBatchState" role="status" style="font-size:12px;margin:10px 0" hidden></div>
       <div id="slotList"></div>
       <div id="slotDiscover"></div>
@@ -8748,7 +8764,7 @@ const SORT_COL_KINDS = {
   accounts:         ['text', 'text', 'text', null, 'num', 'num', 'num', 'num', null],
   // 名称 / 代理地址是 <input>（textContent 恒为空串，按它排等于没排）、启用是复选框、
   // 账号上限是 <input>、操作是按钮列——登记成 null，别让表头挂上一个点了没反应的箭头。
-  slotList:         [null, null, 'text', null, null, 'num', null, null],
+  slotList:         [null, null, 'text', null, null, 'num', null, 'num', 'num', null],
   disabledList:     ['text', 'text', 'text', 'text', 'text', 'text'],
 };
 /* 表体开头有几行是汇总行、不是数据行：矩阵面板的「全部模型合计」钉在表体第一行，
@@ -15789,6 +15805,52 @@ async function setAccountSlot(uid, slotId, el){
   }
 }
 
+let SLOT_TRAFFIC_INTERVAL = 'all';
+let SLOT_TRAFFIC_DATA = null;
+
+function fmtSlotNum(v){
+  if(v == null || !isFinite(v)) return '—';
+  return Number(v).toLocaleString('zh-CN');
+}
+
+function fmtSlotTok(v){
+  if(v == null || !isFinite(v)) return '0';
+  const n = Number(v);
+  if(Math.abs(n) >= 1e9) return (n / 1e9).toFixed(2).replace(/\.?0+$/, '') + 'B';
+  if(Math.abs(n) >= 1e6) return (n / 1e6).toFixed(1).replace(/\.?0+$/, '') + 'M';
+  if(Math.abs(n) >= 1e3) return (n / 1e3).toFixed(1).replace(/\.?0+$/, '') + 'K';
+  return String(n);
+}
+
+function fmtTrafficBytes(bytes){
+  if(bytes == null || isNaN(bytes)) return '—';
+  const b = Number(bytes);
+  if(b <= 0) return '0 B';
+  if(b >= 1073741824) return (b / 1073741824).toFixed(2) + ' GB';
+  if(b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+  if(b >= 1024) return (b / 1024).toFixed(1) + ' KB';
+  return b + ' B';
+}
+
+async function setSlotTrafficInterval(interval, btn){
+  SLOT_TRAFFIC_INTERVAL = interval;
+  const seg = document.getElementById('slotTrafficSeg');
+  if(seg){
+    Array.from(seg.querySelectorAll('button')).forEach(b => {
+      b.classList.toggle('on', b === btn || b.getAttribute('data-interval') === interval);
+    });
+  }
+  try {
+    const res = await getJSON('/proxy/slots/traffic?interval=' + encodeURIComponent(interval));
+    if(res && res.totals){
+      SLOT_TRAFFIC_DATA = res;
+      renderProxySlots();
+    }
+  } catch(e) {
+    console.error('failed to fetch slot traffic:', e);
+  }
+}
+
 async function loadProxySlots(force){
   loadProxyHealth();
   loadProxySubscriptions();
@@ -15797,6 +15859,12 @@ async function loadProxySlots(force){
   try{
     const r = await getJSON('/proxy/slots');
     PROXY_SLOTS = r.slots || [];
+    if(SLOT_TRAFFIC_INTERVAL !== 'all'){
+      try{
+        const tr = await getJSON('/proxy/slots/traffic?interval=' + encodeURIComponent(SLOT_TRAFFIC_INTERVAL));
+        if(tr && tr.totals) SLOT_TRAFFIC_DATA = tr;
+      }catch(_){}
+    }
     renderProxySlots();
   }catch(e){
     // Panel not logged in yet; actions on the settings page surface errors.
@@ -16034,12 +16102,26 @@ function renderProxySlots(){
     + '<th style="width:90px;text-align:center">启用</th>'
     + '<th style="width:90px;text-align:center">绑定账号</th>'
     + '<th style="width:115px;text-align:center">账号上限 <button class="sec mini" type="button" onclick="batchSetSlotMaxAccounts(event)" title="统一设置所有代理槽最多代理的账号数量" style="font-size:11px;padding:0 5px;line-height:18px;vertical-align:middle;font-weight:normal">统一</button></th>'
+    + '<th style="width:105px;text-align:right">Token 消耗</th>'
+    + '<th style="width:105px;text-align:right">流量消耗</th>'
     + '<th style="width:190px;text-align:center">操作</th>'
     + '</tr></thead><tbody>'
     + PROXY_SLOTS.map((s, i) => {
         const tag = slotGroupTag(s);
         if(tag && !s.group) s.group = tag;
         s.label = s.name || autoSlotName(s) || s.id;
+        const stats = (SLOT_TRAFFIC_DATA && SLOT_TRAFFIC_DATA.totals && SLOT_TRAFFIC_DATA.totals[s.id]) || s.stats || {};
+        const totalTok = stats.total_tokens || 0;
+        const promptTok = stats.prompt_tokens || 0;
+        const compTok = stats.completion_tokens || 0;
+        const bytesTotal = stats.bytes_total || ((stats.bytes_in || 0) + (stats.bytes_out || 0)) || 0;
+        const bytesIn = stats.bytes_in || 0;
+        const bytesOut = stats.bytes_out || 0;
+        const reqs = stats.requests || 0;
+        const tokBrief = totalTok > 0 ? fmtSlotTok(totalTok) : '0';
+        const tokTip = 'Prompt: ' + fmtSlotNum(promptTok) + ' | Completion: ' + fmtSlotNum(compTok) + ' | 总计: ' + fmtSlotNum(totalTok) + ' (' + reqs + ' 次请求)';
+        const trafficBrief = fmtTrafficBytes(bytesTotal);
+        const trafficTip = '上行: ' + fmtTrafficBytes(bytesIn) + ' | 下行: ' + fmtTrafficBytes(bytesOut) + ' | 总计: ' + fmtTrafficBytes(bytesTotal);
         return '<tr>'
         + '<td data-label="名称"><input value="' + esc(s.name || '') + '" placeholder="' + esc(s.label || '') + '" oninput="PROXY_SLOTS[' + i + '].name=this.value; markSlotsDirty()" class="slot-input"></td>'
         + '<td data-label="代理地址"><input value="' + esc(s.url || '') + '" placeholder="http://user:pass@127.0.0.1:8080" oninput="PROXY_SLOTS[' + i + '].url=this.value; markSlotsDirty(); refreshProxySlotLatencies()" class="slot-input mono"></td>'
@@ -16049,6 +16131,8 @@ function renderProxySlots(){
         +   ' onchange="PROXY_SLOTS[' + i + '].enabled=this.checked; markSlotsDirty(); refreshProxySlotLatencies()"></td>'
         + '<td style="text-align:center" data-label="绑定账号">' + (s.bound || 0) + '</td>'
         + '<td style="text-align:center" data-label="账号上限"><input type="number" min="0" value="' + (s.max_accounts > 0 ? s.max_accounts : '') + '" placeholder="不限" title="最多代理的账号数量（填 0 或留空表示不限）" oninput="setSlotMaxAccounts(' + i + ', this.value)" class="slot-input" style="width:75px;text-align:center"></td>'
+        + '<td style="text-align:right" data-label="Token 消耗" data-sort="' + totalTok + '"><span title="' + esc(tokTip) + '" style="cursor:help;font-family:var(--mono,monospace)">' + esc(tokBrief) + '</span></td>'
+        + '<td style="text-align:right" data-label="流量消耗" data-sort="' + bytesTotal + '"><span title="' + esc(trafficTip) + '" style="cursor:help;font-family:var(--mono,monospace)">' + esc(trafficBrief) + '</span></td>'
         + '<td style="text-align:center;white-space:nowrap" data-label="">'
         +   '<button class="sec mini" onclick="testProxySlot(' + i + ', this)"'+(SLOT_BATCH_RUNNING?' disabled':'')+'>测试</button> '
         +   (s.pinned
@@ -16061,6 +16145,7 @@ function renderProxySlots(){
     + '</tbody></table></div>'
     + '<div class="legend slot-latency-legend"><span class="slot-latency slot-latency-ok">≤300 ms</span><span class="slot-latency slot-latency-warn">301–800 ms</span><span class="slot-latency slot-latency-bad">&gt;800 ms / 不可用</span><span>延迟为代理 HTTPS 探测耗时，不代表模型响应速度；悬停查看探测时间。</span></div>'
     + '<div class="legend"><span>「绑定账号」只统计已启用账号；停用账号会自动释放槽位，重新启用后需重新绑定。在网关页账号表的「出口」下拉中调整绑定。名称留空时按出口自动显示「国家 类型」，点「测试」会补全出口信息并据此命名。</span>'
+    + ' <span>「Token 消耗」与「流量消耗」按选定周期（全部/本月/今天/最近1小时）汇总该代理槽代理的请求量，悬停可查看上行、下行与 Token 明细。</span>'
     + ' <span>「账号上限」设置单个代理槽最多代理的账号数量（填 0 或留空为不限），可在表头点击「统一」批量设置；一键分配代理时超出上限的账号将顺延分配至后续可用槽位。</span>'
     + ' <span>' + slotBatchText('「固定」可锁定该代理槽当前使用的节点，定期测速后不随排名自动轮转；自动调整未固定槽位时，优先使用相同地区的低延迟节点替换，以防异地风控。') + '</span></div>';
   applyTableSort('slotList');

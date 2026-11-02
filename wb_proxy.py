@@ -88,6 +88,7 @@ import wb_modelsdev
 import wb_probes
 import wb_updates
 import wb_update_request
+import wb_slot_traffic
 IS_WINDOWS = os.name == "nt"
 
 # ---- 一键配置客户端（wb_agents）的可用性判定（issue #246）----
@@ -845,7 +846,7 @@ def _best_cached_tokens(usage):
 
 def record_usage(model, usage, stream=None, elapsed_ms=None, ttft_ms=None, gen_ms=None, fp=None,
                 account=None, outcome="completed", key=None, effort=None,
-                requested_model=None, realm=None):
+                requested_model=None, realm=None, bytes_in=0, bytes_out=0, **kwargs):
     """Record one finished request as exactly one JSONL row.
 
     A request without a usage block still gets a row (flagged usage_missing):
@@ -918,6 +919,34 @@ def record_usage(model, usage, stream=None, elapsed_ms=None, ttft_ms=None, gen_m
         row["cache_hit_pct"] = round(fields.get("cached_tokens", 0) * 100.0
                                      / fields["prompt_tokens"], 1)
     _persist_usage(row, "usage persist failed")
+    if account and USAGE_DIR:
+        try:
+            slot_id = None
+            if POOL:
+                acc_obj = POOL.get(account)
+                if acc_obj:
+                    slot_id = getattr(acc_obj, "proxy_slot", None)
+            if not slot_id:
+                try:
+                    ca_pool = wb_codearts.pool_for(ACCOUNTS_DIR)
+                    ca_acc = ca_pool.get(account)
+                    if ca_acc:
+                        slot_id = getattr(ca_acc, "proxy_slot", None)
+                except Exception:
+                    pass
+            if slot_id:
+                wb_slot_traffic.record(
+                    USAGE_DIR,
+                    slot_id,
+                    prompt_tokens=fields.get("prompt_tokens", 0),
+                    completion_tokens=fields.get("completion_tokens", 0),
+                    total_tokens=fields.get("total_tokens", 0),
+                    bytes_in=bytes_in,
+                    bytes_out=bytes_out,
+                    ts=row.get("at"),
+                )
+        except Exception:
+            pass
     try:
         t_tokens = fields.get("total_tokens", 0)
         dur = f" {elapsed_ms:.0f}ms" if elapsed_ms is not None else ""
@@ -934,6 +963,10 @@ def record_usage(model, usage, stream=None, elapsed_ms=None, ttft_ms=None, gen_m
 def record_upstream_usage(upstream, requested_model, usage, **kwargs):
     """Record the model actually billed upstream, preserving the client alias."""
     billed_model = getattr(upstream, "_wb_billed_model", requested_model)
+    if "bytes_in" not in kwargs and hasattr(upstream, "_wb_bytes_in"):
+        kwargs["bytes_in"] = getattr(upstream, "_wb_bytes_in", 0)
+    if "bytes_out" not in kwargs and hasattr(upstream, "_wb_bytes_out"):
+        kwargs["bytes_out"] = getattr(upstream, "_wb_bytes_out", 0)
     record_usage(billed_model, usage, requested_model=requested_model, **kwargs)
 
 
@@ -6529,6 +6562,12 @@ def proxy_slots_view():
                 health_rows = dict(mon.rows)
     except Exception:
         health_rows = {}
+    slot_stats = {}
+    try:
+        if USAGE_DIR:
+            slot_stats = wb_slot_traffic.query(USAGE_DIR, interval="all").get("totals", {})
+    except Exception:
+        slot_stats = {}
     out = []
     for entry in wb_settings.proxy_slots(ACCOUNTS_DIR):
         item = dict(entry)
@@ -6541,6 +6580,10 @@ def proxy_slots_view():
             if tag and not item.get("group"):
                 item["group"] = tag
         item["label"] = slot_label(item)
+        item["stats"] = slot_stats.get(entry["id"], {
+            "requests": 0, "prompt_tokens": 0, "completion_tokens": 0,
+            "total_tokens": 0, "bytes_in": 0, "bytes_out": 0, "bytes_total": 0
+        })
         out.append(item)
     return out
 
@@ -15065,6 +15108,8 @@ def open_upstream(payload, session_key=None, target_realm=None, prebuilt_body=No
         try:
             resp = wb_accounts.urlopen(req, timeout=header_timeout,
                                        proxy=account.proxy)
+            resp._wb_bytes_in = len(attempt_data) if attempt_data else 0
+            resp._wb_bytes_out = 0
             _apply_stream_idle_timeout(resp, idle_timeout)
             account.note_success(model=model)
             if egress_backoff and not defer_egress_success:
@@ -15895,6 +15940,8 @@ def iter_sse_lines(source, block_size=SSE_READ_BLOCK, before_read=None):
     read1 = getattr(source, "read1", None)
     if read1 is None:
         for line in source:
+            if hasattr(source, "_wb_bytes_out"):
+                source._wb_bytes_out += len(line)
             if before_read is not None:
                 before_read()
             yield line
@@ -15913,6 +15960,8 @@ def iter_sse_lines(source, block_size=SSE_READ_BLOCK, before_read=None):
             if remaining > 0:
                 raise http.client.IncompleteRead(b"", remaining)
             break
+        if hasattr(source, "_wb_bytes_out"):
+            source._wb_bytes_out += len(chunk)
         buf += chunk
         if b"\n" not in buf:
             continue
@@ -19357,6 +19406,12 @@ class Handler(BaseHTTPRequestHandler):
                     401, "panel password required", "invalid_request_error"
                 )
             return self._json(200, {"slots": proxy_slots_view()})
+        if path == "/proxy/slots/traffic":
+            if not self._panel_ok():
+                return self._error(
+                    401, "panel password required", "invalid_request_error"
+                )
+            return self._get_proxy_slot_traffic(query)
         if path == "/logs":
             return self._get_logs(query)
         if path == "/logs/export":
@@ -20865,10 +20920,34 @@ class Handler(BaseHTTPRequestHandler):
         reply.update(runtime_settings_view())
         return self._json(200, reply)
 
+    def _get_proxy_slot_traffic(self, query):
+        interval = (query.get("interval") or ["all"])[0] if isinstance(query, dict) else "all"
+        slot_id = (query.get("slot") or [None])[0] if isinstance(query, dict) else None
+        limit_val = (query.get("limit") or [None])[0] if isinstance(query, dict) else None
+        limit = None
+        if limit_val is not None:
+            try:
+                limit = int(limit_val)
+            except Exception:
+                limit = None
+        data = wb_slot_traffic.query(USAGE_DIR, interval=interval, slot_id=slot_id, limit=limit)
+        return self._json(200, data)
+
     def _handle_proxy_slots(self, path, payload):
         """Proxy-slot management (panel-authenticated)."""
         if path == "/proxy/slots":
             return self._json(200, {"slots": proxy_slots_view()})
+        if path == "/proxy/slots/traffic":
+            interval = payload.get("interval", "all")
+            slot_id = payload.get("slot")
+            limit = payload.get("limit")
+            if limit is not None:
+                try:
+                    limit = int(limit)
+                except Exception:
+                    limit = None
+            data = wb_slot_traffic.query(USAGE_DIR, interval=interval, slot_id=slot_id, limit=limit)
+            return self._json(200, data)
         if path == "/proxy/slots/save":
             raw = payload.get("slots")
             if not isinstance(raw, list):
@@ -23859,6 +23938,11 @@ def _bootstrap_runtime(args):
     # 不建文件、不改日志路径。
     LOG_STORE = wb_logstore.LogStore(os.path.join(USAGE_DIR, "logs.sqlite3"))
     apply_log_db_settings()
+    try:
+        wb_slot_traffic.init(USAGE_DIR)
+        wb_slot_traffic.backfill_from_usage(USAGE_DIR, ACCOUNTS_DIR)
+    except Exception as exc:
+        log("slot traffic init error: %s" % exc)
     # LAN mode must not ship a known key: the gateway spends the account's own
     # upstream quota, so a guessable default lets anyone on the network drain
     # it. Generate one on first use, persist it, and reuse it afterwards.

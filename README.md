@@ -202,7 +202,7 @@ python tests/run_all.py            # 全部套件
 python tests/run_all.py realm      # 只跑名字里含 realm 的
 ```
 
-- 249 个套件：185 个 Python + 64 个 JS；JS 需要 PATH 上有 `node`，缺失时会跳过并提示。
+- 250 个套件：186 个 Python + 64 个 JS；JS 需要 PATH 上有 `node`，缺失时会跳过并提示。
 - `tests/_mobile_check.py` 是独立的 Playwright 手机/桌面布局检查器（需自行安装 Playwright），按需手动运行，不在上面的套件集里。
 - CI（`.github/workflows/tests.yml`）跑同一条命令：Ubuntu 上 python 3.9 与 3.12（3.9 是本项目声称的最低版本），Windows 上 python 3.12；推送 `v*` tag 时额外断言 **tag == 源码版本**（`-ci` 演练 tag 豁免）。
 
@@ -509,6 +509,7 @@ export ANTHROPIC_API_KEY="你在看板设置中添加并绑定的API_Key"
 
 ### Unreleased
 
+- **代理槽流量与 Token 统计（支持小时/天/月聚合与历史回溯）**：代理槽管理模块新增网络流量（上行/下行/总计，KB/MB/GB）与 Token 消耗统计列；支持在全部、本月、今天、最近 1 小时 4 个时间维度间即时切换并支持表头排序；后端通过 `wb_slot_traffic`（SQLite 持久化）按小时聚合存储并自动幂等回填历史 `usage.jsonl` 用量数据；提供 `/proxy/slots/traffic` 查询 API。 / Add proxy slot network traffic (in/out/total, KB/MB/GB) and token usage statistics; support dynamic filtering and table sorting across all-time, month, day, and 1-hour time dimensions; backend uses SQLite (`wb_slot_traffic`) for hourly aggregated buckets with automatic idempotent backfill from historical `usage.jsonl` data; provide `/proxy/slots/traffic` query API.
 - **上游出站长连接禁用 Nagle 算法（TCP_NODELAY）**：为 `_PooledHTTPConnection` 与 `_PooledHTTPSConnection` 出站长连接显式配置 `TCP_NODELAY`，彻底消除 `http.client` 将小请求头与 body 分两次发送时撞上 Linux delayed ACK 造成的 40ms~50ms 延迟开销。 / Disable Nagle's algorithm (TCP_NODELAY) on pooled upstream connections, eliminating the 40-50ms Linux delayed-ACK delay when request headers and small bodies are transmitted.
 - **控制台 UI 现代科技风焕新、设置分类导航与账号即时搜索筛选**：控制台升级为现代极简科技蓝风格（深色与浅色主题全面优化层次与对比度）；设置页 34 个配置项整合为 5 个核心分类子导航（🔑 API Key 与访问、🌐 网络与代理、🤖 模型与调度、🛡️ 安全与隐私、⚙️ 系统与高级，及全部设置），支持分类持久化与侧边栏联动；账号页新增即时搜索框与状态筛选胶囊（全部/正常/冷却/停用），支持 UID、备注与出口快速模糊检索与计数统计。 / Modernize dashboard UI with a clean Slate & Tech Blue theme (optimized contrast and surface hierarchy across both light and dark modes); group 34 sprawl settings into 5 structured sub-navigation categories (API Key & Access, Network & Proxy, Model & Dispatch, Security & Privacy, System & Advanced, plus All Settings) with tab persistence and sidebar synchronization; add instant accounts search and status filter chips (All/Active/Cooldown/Disabled) with live match counting.
 - **代理槽账号上限与顺延分配**：代理槽列表新增「账号上限」列，支持针对单个代理槽自定义最大代理账号数（填 0 或留空为不限），或通过表头「统一」按钮及工具栏批量设置所有槽位上限；「一键分配代理」按槽位上限分配，单槽达上限后自动顺延分配至后续可用槽位，并在全部槽位满额时给出未分配提示。 / Proxy slots add an Account Limit column to customize max proxy accounts per slot or in bulk via the toolbar/header "Set all" button (0/empty = unlimited); one-click proxy assignment respects per-slot limits, rolling over excess accounts to available slots and notifying if any remain unassigned when full.
