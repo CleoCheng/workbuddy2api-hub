@@ -4896,7 +4896,7 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     <button class="sec" onclick="testAccounts(this)" title="逐个真发一条最小请求，并同时检查本机到上游的网络：能分清「账号坏了」和「本机断网了」，测试通过还会清掉该账号的熔断/降权计数">一键测试</button>
     </div>
     <div class="tb-group">
-    <button class="sec" onclick="autoAssignSlots()" title="把尚未绑定出口的已启用账号依次分配到已启用的代理槽；已有绑定的账号不受影响">一键分配代理</button>
+    <button class="sec" onclick="autoAssignSlots()" title="把尚未绑定出口的已启用国际版账号依次分配到已启用的代理槽；国内版默认直连，已有绑定的账号不受影响">一键分配代理</button>
     <button class="sec" id="btnProductAll" onclick="cycleAllProducts(this)" title="把全部账号（含另一个版本）的出站身份切到下一个：WB → VSC → CLI">一键切换所有出站身份：<span id="productAllLabel">WB</span></button>
     <button class="sec" onclick="setAll(true, this)">全部启用</button>
     <button class="sec" onclick="setAll(false, this)">全部停用</button>
@@ -16786,7 +16786,8 @@ function importDiscovered(){
 async function autoAssignSlots(){
   // Only fills in accounts that have no exit yet: an account that is already
   // bound keeps its slot, so this is not a rebalancer.
-  const unbound = (window.ACCOUNTS || []).filter(a => a.enabled && !a.proxySlot);
+  // 国内渠道默认直连，只有国际版参与代理池分配
+  const unbound = (window.ACCOUNTS || []).filter(a => a.enabled && !a.proxySlot && (a.realm || 'intl') === 'intl');
   if(!unbound.length){ toast('所有已启用账号都已绑定代理出口', 'ok'); return; }
   const slots = PROXY_SLOTS.filter(s => s.enabled !== false && s.id);
   if(!slots.length){ toast('没有启用的代理槽，请先在「设置 → 账号代理槽」添加并保存', 'warn'); return; }

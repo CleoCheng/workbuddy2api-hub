@@ -4300,7 +4300,9 @@ class AccountPool(object):
             else:
                 self.accounts.append(account)
             if not account.proxy_slot and not account.proxy_legacy:
-                account.proxy_slot = self._pick_default_proxy_slot()
+                # 国内渠道默认直连，不需要分配代理槽；只有国际版自动从代理池分配
+                if str(getattr(account, "realm", "") or "").strip().lower() == "intl":
+                    account.proxy_slot = self._pick_default_proxy_slot()
             account.save(self.dir)
             self.apply_proxy_slots()
             self.apply_reserve_credits()
@@ -5557,6 +5559,8 @@ def normalise_import_row(row, realm=None):
         "expiresAt": (0 if api_key
                       else normalize_epoch(pick("expiresAt")) or jwt_exp(token)),
         "source": str(pick("source") or (SOURCE_API_KEY if api_key else "import")),
+        "proxySlot": str(pick("proxySlot") or "").strip(),
+        "proxy": str(pick("proxy") or "").strip(),
         "enabled": True,
         # Imported accounts start with tasks on (they are new to this pool);
         # an export that carries the flag keeps the operator's choice.

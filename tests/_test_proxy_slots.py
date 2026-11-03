@@ -345,5 +345,37 @@ p_auto.add(a3)
 check("third account remains unassigned when both slots are at limit", a3.proxy_slot == "", a3.proxy_slot)
 
 print()
+print("[15] domestic CN account defaults to direct connection without proxy slot")
+d_cn = os.path.join(_TMP.name, "cn_slot")
+S.set_proxy_slots(d_cn, [
+    {"id": "slot-cn-1", "name": "one", "url": "http://slot:1"},
+])
+p_cn = A.AccountPool(d_cn, log=lambda m: None)
+a_cn = A.Account({"uid": "u-auto-cn", "domain": "copilot.tencent.com", "realm": "cn", "accessToken": "tok_cn"})
+p_cn.add(a_cn)
+check("domestic CN account has empty proxy_slot", a_cn.proxy_slot == "", a_cn.proxy_slot)
+check("domestic CN account runtime proxy is direct", a_cn.proxy == "", a_cn.proxy)
+
+# But if an explicit proxy slot is given for CN, it is respected
+a_cn_explicit = A.Account({
+    "uid": "u-auto-cn-exp", "domain": "copilot.tencent.com", "realm": "cn",
+    "accessToken": "tok_cn2", "proxySlot": "slot-cn-1",
+})
+p_cn.add(a_cn_explicit)
+check("explicit proxy slot on CN account is preserved", a_cn_explicit.proxy_slot == "slot-cn-1", a_cn_explicit.proxy_slot)
+check("explicit proxy slot resolves runtime proxy", a_cn_explicit.proxy == "http://slot:1", a_cn_explicit.proxy)
+
+# Import rows preserves explicit proxy slot or defaults CN to direct
+report = p_cn.import_rows([
+    {"uid": "u-imp-cn", "domain": "copilot.tencent.com", "realm": "cn", "accessToken": "a.b.c"},
+    {"uid": "u-imp-intl", "domain": "www.workbuddy.ai", "realm": "intl", "accessToken": "d.e.f"},
+])
+check("import added 2 accounts", len(report["added"]) == 2, report)
+imp_cn = p_cn.get("u-imp-cn")
+imp_intl = p_cn.get("u-imp-intl")
+check("imported CN account defaults to direct", imp_cn.proxy_slot == "", imp_cn.proxy_slot)
+check("imported INTL account gets proxy slot", imp_intl.proxy_slot == "slot-cn-1", imp_intl.proxy_slot)
+
+print()
 print("PASS=%d FAIL=%d" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)
