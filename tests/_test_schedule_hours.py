@@ -22,20 +22,21 @@ class ScheduleSettingsTests(unittest.TestCase):
     def test_defaults_when_the_key_is_absent(self):
         with tempfile.TemporaryDirectory(prefix="sched-") as directory:
             self.assertEqual(wb_settings.schedule_hours(directory), {
-                "checkin": [9, 21], "travel": [9, 21],
-                "keepalive": [22], "cat": [1],
+                "checkin": [8, 21], "travel": [8, 21],
+                "keepalive": [22], "cat": [1], "growth": [8],
             })
 
     def test_list_and_comma_string_are_accepted(self):
         with tempfile.TemporaryDirectory(prefix="sched-") as directory:
             wb_settings.set_schedule_hours(directory, {
                 "checkin": "20, 10,10", "travel": [6, 18],
-                "keepalive": "12", "cat": [1],
+                "keepalive": "12", "cat": [1], "growth": [8],
             })
             hours = wb_settings.schedule_hours(directory)
             self.assertEqual(hours["checkin"], [10, 20])
             self.assertEqual(hours["travel"], [6, 18])
             self.assertEqual(hours["keepalive"], [12])
+            self.assertEqual(hours["growth"], [8])
 
     def test_invalid_empty_and_out_of_range_fall_back_per_key(self):
         with tempfile.TemporaryDirectory(prefix="sched-") as directory:
@@ -45,13 +46,15 @@ class ScheduleSettingsTests(unittest.TestCase):
                 "travel": [],                 # empty -> default
                 "keepalive": "99",            # out of range -> default
                 "cat": [3, 3],                # valid -> kept
+                "growth": [-5],               # invalid -> default
             }
             wb_settings.save(directory, data)
             hours = wb_settings.schedule_hours(directory)
-            self.assertEqual(hours["checkin"], [9, 21])
-            self.assertEqual(hours["travel"], [9, 21])
+            self.assertEqual(hours["checkin"], [8, 21])
+            self.assertEqual(hours["travel"], [8, 21])
             self.assertEqual(hours["keepalive"], [22])
             self.assertEqual(hours["cat"], [3])
+            self.assertEqual(hours["growth"], [8])
 
     def test_partial_update_keeps_other_keys(self):
         with tempfile.TemporaryDirectory(prefix="sched-") as directory:
@@ -60,7 +63,8 @@ class ScheduleSettingsTests(unittest.TestCase):
             hours = wb_settings.schedule_hours(directory)
             self.assertEqual(hours["checkin"], [10, 20])
             self.assertEqual(hours["keepalive"], [12])
-            self.assertEqual(hours["travel"], [9, 21])
+            self.assertEqual(hours["travel"], [8, 21])
+            self.assertEqual(hours["growth"], [8])
 
     def test_invalid_write_is_rejected(self):
         with tempfile.TemporaryDirectory(prefix="sched-") as directory:
@@ -77,11 +81,12 @@ class SchedulerScheduleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="sched-run-") as directory:
             wb_settings.set_schedule_hours(directory, {
                 "checkin": [10, 20], "travel": [10, 20],
-                "keepalive": [12], "cat": [1],
+                "keepalive": [12], "cat": [1], "growth": [10],
             })
             scheduler = wb_scheduler.Scheduler(StubPool(directory))
             self.assertEqual(scheduler.checkin_hours, [10, 20])
             self.assertEqual(scheduler.keepalive_hours, [12])
+            self.assertEqual(scheduler.growth_hours, [10])
             self.assertEqual(scheduler.all_hours, [1, 10, 12, 20])
             self.assertIn("10:00/20:00", scheduler.status()["mode_cn"])
             self.assertIn("12:00", scheduler.status()["mode_intl"])
@@ -129,6 +134,12 @@ class FakeAccount(object):
         self.daily += 1
         return {"ok": True, "msg": "OK"}
 
+    def can_run_growth_tasks(self):
+        return True
+
+    def record_growth_tasks(self):
+        pass
+
     def refresh(self):
         self.refreshes += 1
         return True
@@ -143,7 +154,7 @@ class TaskGatingTests(unittest.TestCase):
 
     def _run_at(self, scheduler, account, hour, force=False):
         stamp = time.struct_time((2026, 10, 20, hour, 0, 0, 0, 0, -1))
-        seen = {"travel": 0, "bonus": 0, "cat": 0}
+        seen = {"travel": 0, "bonus": 0, "cat": 0, "growth": 0}
 
         def travel(_acc):
             seen["travel"] += 1
@@ -157,11 +168,16 @@ class TaskGatingTests(unittest.TestCase):
             seen["cat"] += 1
             return {"logs": []}
 
+        def growth(_acc, **_k):
+            seen["growth"] += 1
+            return {"earned_credit": 100, "logs": []}
+
         with mock.patch.object(wb_scheduler.time, "localtime", lambda *a: stamp), \
                 mock.patch.object(wb_scheduler.time, "sleep", lambda *_: None), \
                 mock.patch.object(wb_scheduler, "do_cat_travel", travel), \
                 mock.patch.object(wb_scheduler.wb_tasks, "run_streak_bonus", bonus), \
-                mock.patch.object(wb_scheduler.wb_tasks, "run_night_growth", night):
+                mock.patch.object(wb_scheduler.wb_tasks, "run_night_growth", night), \
+                mock.patch.object(wb_scheduler.wb_tasks, "run_growth_tasks", growth):
             scheduler._run_cycle("test", force=force)
         return seen
 
@@ -213,8 +229,8 @@ class TaskGatingTests(unittest.TestCase):
     def test_checkin_hour_runs_checkin_and_report_but_not_travel(self):
         with tempfile.TemporaryDirectory(prefix="sched-gate-") as directory:
             wb_settings.set_schedule_hours(directory, {
-                "checkin": [10, 20], "travel": [9, 21],
-                "keepalive": [12], "cat": [1],
+                "checkin": [10, 20], "travel": [8, 21],
+                "keepalive": [12], "cat": [1], "growth": [8],
             })
             scheduler = wb_scheduler.Scheduler(StubPool(directory))
             account = FakeAccount()
@@ -222,7 +238,21 @@ class TaskGatingTests(unittest.TestCase):
 
             seen = self._run_at(scheduler, account, 10)
             self.assertEqual((account.checkins, account.reports), (1, 1))
-            self.assertEqual((seen["travel"], seen["bonus"], seen["cat"]), (0, 0, 0))
+            self.assertEqual((seen["travel"], seen["bonus"], seen["cat"], seen["growth"]), (0, 0, 0, 0))
+
+    def test_growth_hour_runs_growth_tasks_and_records(self):
+        with tempfile.TemporaryDirectory(prefix="sched-gate-") as directory:
+            wb_settings.set_schedule_hours(directory, {
+                "checkin": [10, 20], "travel": [7, 21],
+                "keepalive": [12], "cat": [1], "growth": [8],
+            })
+            scheduler = wb_scheduler.Scheduler(StubPool(directory))
+            account = FakeAccount()
+            scheduler.pool.accounts = [account]
+
+            seen = self._run_at(scheduler, account, 8)
+            self.assertEqual((account.checkins, account.reports), (0, 0))
+            self.assertEqual((seen["travel"], seen["bonus"], seen["cat"], seen["growth"]), (0, 0, 0, 1))
 
     def test_manual_trigger_forces_every_task(self):
         with tempfile.TemporaryDirectory(prefix="sched-gate-") as directory:

@@ -223,6 +223,20 @@ class CheckinRouteTests(unittest.TestCase):
             self.assertEqual(called, ["uid-off"])
 
 
+class GrowthTaskGatingTests(unittest.TestCase):
+    def test_can_run_growth_tasks_daily_gate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            acc = account("uid-growth", realm="cn")
+            acc.path = os.path.join(directory, "uid-growth.json")
+            self.assertTrue(acc.can_run_growth_tasks())
+            acc.record_growth_tasks()
+            self.assertFalse(acc.can_run_growth_tasks())
+            self.assertIsNotNone(acc.last_growth_tasks)
+            # 国际版与企业版不适用国内成长任务
+            acc_intl = account("uid-intl", realm="intl")
+            self.assertFalse(acc_intl.can_run_growth_tasks())
+
+
 if __name__ == "__main__":
     unittest.main()
 

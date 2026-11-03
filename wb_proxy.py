@@ -21756,6 +21756,11 @@ class Handler(BaseHTTPRequestHandler):
             nick = acc.nickname or uid_str
             combined_logs.append(f"====== 正在为账号 [{nick} ({acc.uid})] 执行全自动成长任务 ({i+1}/{len(targets)}) ======")
             res = run_growth_tasks(acc, gap=1.0, claim=claim)
+            if hasattr(acc, "record_growth_tasks"):
+                try:
+                    acc.record_growth_tasks()
+                except Exception:
+                    pass
             # run_growth_tasks() reports its total as "earned_credit";
             # reading the old "credit_added" name silently summed zeros
             # and the dashboard always showed "+0 积分".

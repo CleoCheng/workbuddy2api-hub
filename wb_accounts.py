@@ -1073,6 +1073,8 @@ class Account(object):
         # 国内版每天一次的「对话活跃上报」（点亮官方 growth 连登/热力墙）上次
         # 成功的时刻；与 lastCheckin 同款：只按「今天成功过没有」做闸门。
         self.last_activity_report = data.get("lastActivityReport") or None
+        # 国内版每天一次的成长任务全自动巡检上次成功的时刻
+        self.last_growth_tasks = data.get("lastGrowthTasks") or None
         # 上游「窗口额度用满」的记录（429 / code 6004）：model -> {"at": 撞线时刻,
         # "reset": 上游给的恢复时刻}。**持久化**（与其它节流窗口不同）：重启后
         # 仍然知道这个组合在恢复时间内，不用等下一次撞线才重新发现。
@@ -1199,6 +1201,7 @@ class Account(object):
             "lastCheckin": self.last_checkin,
             "lastDailyChat": self.last_daily_chat,
             "lastActivityReport": self.last_activity_report,
+            "lastGrowthTasks": self.last_growth_tasks,
             # 持久化：6004 的恢复时间是上游给的事实，重启后仍然成立（见 __init__）。
             "modelCaps": {mid: dict(entry) for mid, entry in self.model_caps.items()},
         }
@@ -1320,6 +1323,7 @@ class Account(object):
             "lastCheckin": self.last_checkin,
             "lastDailyChat": self.last_daily_chat,
             "lastActivityReport": self.last_activity_report,
+            "lastGrowthTasks": self.last_growth_tasks,
             "canCheckin": self.realm == "cn" and not self.uses_enterprise_billing(),
             "canDailyChat": self.realm == "intl",
             "canReportActivity": (self.realm in ("cn", "intl")
@@ -2149,6 +2153,23 @@ class Account(object):
             return True
         today_str = time.strftime("%Y-%m-%d")
         return not str(self.last_activity_report).startswith(today_str)
+
+    def can_run_growth_tasks(self):
+        """每天一次的成长任务全自动巡检是否还没做过。"""
+        if self.realm != "cn":
+            return False
+        if self.uses_enterprise_billing():
+            return False
+        if not self.last_growth_tasks:
+            return True
+        today_str = time.strftime("%Y-%m-%d")
+        return not str(self.last_growth_tasks).startswith(today_str)
+
+    def record_growth_tasks(self):
+        """记录今天已运行完成长任务巡检并落盘。"""
+        self.last_growth_tasks = time.strftime("%Y-%m-%d %H:%M:%S")
+        if self.path and os.path.exists(os.path.dirname(self.path)):
+            self.save(os.path.dirname(self.path))
 
     def web_headers(self):
         """网页版 app 的出站头：只有 bearer 与 X-User-Id，没有桌面端指纹。"""
@@ -5365,7 +5386,7 @@ EXPORT_VERSION = 1
 # exported for inspection but never trusted on import: a stale cooldown or a
 # disabled flag from another machine would silently cripple the target pool.
 VOLATILE_FIELDS = ("cooldownUntil", "lastError", "credits", "lastCheckin",
-                   "lastDailyChat", "lastActivityReport", "modelCaps", "tier")
+                   "lastDailyChat", "lastActivityReport", "lastGrowthTasks", "modelCaps", "tier")
 
 # The subset of VOLATILE_FIELDS that must not round-trip through the local
 # credential file at all: they are not trusted on load and not written by save(),

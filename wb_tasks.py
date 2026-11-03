@@ -10,6 +10,7 @@ import json
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 import wb_accounts as _accounts
@@ -63,6 +64,18 @@ TASK_SPECS = {
     "WorkBuddy_Valorant": {"kind": "expert", "target": 1, "reward": 100,
                            "expert": ("ex_xQHHD1u5Jkua", "无畏契约拼豆专家"),
                            "name": "体验「无畏契约拼豆专家」"},
+    "expert_use_maidehao": {"kind": "expert", "target": 1, "reward": 50,
+                            "expert": ("ex_GDl31WahyIH0", "智能营销专家"),
+                            "name": "体验「智能营销专家」"},
+    "expert_use_douyinyin": {"kind": "expert", "target": 1, "reward": 50,
+                             "expert": ("ex_FbY5nlWTqDod", "视频脚本大师"),
+                             "name": "体验「视频脚本大师」"},
+    "expert_use_shangjia_xuanchuan": {"kind": "expert", "target": 1, "reward": 50,
+                                      "expert": ("ex_Weo3x2EZuSDm", "商家主页与海报大师"),
+                                      "name": "体验「商家主页与海报大师」"},
+    "expert_use_bowangwang": {"kind": "expert", "target": 1, "reward": 50,
+                              "expert": ("ex_WZY136wV5aMt", "直播运营专家"),
+                              "name": "体验「直播运营专家」"},
     "wb_wechat_oa_subscribe_task": {"unforgeable": True, "reward": 100,
                                     "reason": "需在微信关注「腾讯 WorkBuddy」公众号满 24 小时",
                                     "name": "关注官方公众号"},
@@ -541,9 +554,27 @@ def _progress_one(account, t, logs, gap, claim=True):
     """
     code = t["task_code"]
     spec = TASK_SPECS.get(code)
+    if not spec:
+        raw_jump = t.get("jump_url") or ""
+        jump_url = urllib.parse.unquote(raw_jump)
+        # 尝试从跳转深链中提取 expertId，自适应官方未来新增的专家活动任务
+        m_exp = re.search(r"expertId=(ex_[a-zA-Z0-9]+)", jump_url, re.IGNORECASE)
+        if m_exp or code.startswith("expert_use_"):
+            ex_id = m_exp.group(1) if m_exp else ""
+            t_name = t.get("name") or code
+            spec = {
+                "kind": "expert",
+                "target": t.get("target", 1),
+                "reward": t.get("reward_credit", 0),
+                "expert": (ex_id, t_name) if ex_id else None,
+                "name": t_name,
+            }
+
     if not spec or spec.get("unforgeable"):
         if spec and spec.get("reason"):
             logs.append(f"⏭ 任务 [{spec.get('name') or code}] 需真实操作完成: {spec['reason']}, 跳过")
+        else:
+            logs.append(f"❓ 检测到未适配的官方任务 [{t.get('name') or code}]，跳过事件伪造")
         return 0
 
     status = t["status"]

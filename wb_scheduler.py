@@ -93,12 +93,13 @@ def keepalive_due(expires_at, now=None, lead=None):
 class Scheduler:
     def __init__(self, pool):
         self.pool = pool
-        # 默认排程对齐 Sliverkiss/workbuddy2api (CST 24小时制)；实际值从
+        # 默认排程对齐 CST 24小时制；实际值从
         # settings.json 的 schedule 段读取，缺省 / 非法回落这些默认值。
-        self.checkin_hours = [9, 21]     # 每日 09:00、21:00 签到
-        self.travel_hours = [9, 21]      # 每日 09:00 派出、21:00 领奖闭环
+        self.checkin_hours = [8, 21]     # 每日 08:00、21:00 签到
+        self.travel_hours = [8, 21]      # 每日 08:00 派出、21:00 领奖闭环
         self.keepalive_hours = [22]      # 每日 22:00 集中 Token 保活检查
         self.cat_hours = [1]             # 每日 01:00 夜猫子专属任务
+        self.growth_hours = [8]          # 每日 08:00 成长任务自动巡检
         # 网页活跃（国际版每日活跃）的独立时段，HH:MM；空 = 当天随机抽两个。
         self.daily_chat_times = []
         # 生效时段是不是「今天随机抽的两个」（面板没填时段时的默认行为）。
@@ -115,7 +116,7 @@ class Scheduler:
         # 启动后第一次巡检要补跑当天还没活跃的国际版账号：进程在时段内停过
         # （或调度线程被卡住）时，旧实现只能等下一个时段，最多再等 12 小时。
         self._catchup_pending = True
-        self.all_hours = sorted(list(set(self.checkin_hours + self.travel_hours + self.keepalive_hours + self.cat_hours)))
+        self.all_hours = sorted(list(set(self.checkin_hours + self.travel_hours + self.keepalive_hours + self.cat_hours + self.growth_hours)))
         self.enabled = True
         self._stop_event = threading.Event()
         self._thread = None
@@ -334,14 +335,17 @@ class Scheduler:
                    or hours["travel"] != self.travel_hours
                    or hours["keepalive"] != self.keepalive_hours
                    or hours["cat"] != self.cat_hours
+                   or hours.get("growth", [8]) != self.growth_hours
                    or times != self.daily_chat_times)
         self.checkin_hours = hours["checkin"]
         self.travel_hours = hours["travel"]
         self.keepalive_hours = hours["keepalive"]
         self.cat_hours = hours["cat"]
+        self.growth_hours = hours.get("growth", [8])
         self.daily_chat_times = times
         self.all_hours = sorted(set(self.checkin_hours + self.travel_hours
-                                    + self.keepalive_hours + self.cat_hours))
+                                    + self.keepalive_hours + self.cat_hours
+                                    + self.growth_hours))
         if changed:
             self._calc_next_fire()
         return changed
@@ -395,9 +399,13 @@ class Scheduler:
         checkin_count = 0
         report_count = 0
         travel_count = 0
+        growth_count = 0
+        growth_credit_total = 0
         daily_chat_count = 0
         daily_chat_targets = []
         cycle_hour = time.localtime().tm_hour
+        directory = getattr(self.pool, "dir", "") or ""
+        growth_enabled = wb_settings.growth_daily_enabled(directory) if directory else True
         run_checkin = (not daily_chat_only
                        and (force or cycle_hour in self.checkin_hours))
         run_travel = (not daily_chat_only
@@ -406,6 +414,8 @@ class Scheduler:
                          and (force or cycle_hour in self.keepalive_hours))
         run_cat = (not daily_chat_only
                    and (force or cycle_hour in self.cat_hours))
+        run_growth = (not daily_chat_only and growth_enabled
+                      and (force or cycle_hour in self.growth_hours))
         # 时段永远存在（面板留空时是「今天随机抽的两个」），所以国际版活跃只按
         # 时段触发；启动后的第一次巡检额外补跑一次当天还没活跃的账号。
         catchup = self._consume_startup_catchup()
@@ -492,6 +502,25 @@ class Scheduler:
                             self.log(f"★ 账号 [{uid8}] {l}")
                         time.sleep(1.0)
 
+                if run_growth:
+                    # 每日 08:00 成长任务全自动巡检（点亮新活动、补齐新号任务、自动领奖）
+                    if getattr(acc, "can_run_growth_tasks", lambda: True)():
+                        self.log(f"检测到国内版账号 [{uid8}] 今日尚未执行成长任务巡检，开始执行...")
+                        try:
+                            res_g = wb_tasks.run_growth_tasks(acc, gap=1.0, claim=True)
+                            earned = res_g.get("earned_credit", 0)
+                            if earned > 0:
+                                growth_count += 1
+                                growth_credit_total += earned
+                                self.log(f"✓ 账号 [{uid8}] 成长任务完成，新增到账 +{earned} 积分")
+                            else:
+                                self.log(f"账号 [{uid8}] 成长任务巡检完毕（无新增待领任务）")
+                            if hasattr(acc, "record_growth_tasks"):
+                                acc.record_growth_tasks()
+                        except Exception as eg:
+                            self.log(f"! 账号 [{uid8}] 成长任务执行异常: {eg}")
+                        time.sleep(1.0)
+
                 if run_cat:
                     # 01:00 夜猫子专属任务: black_cat 只在 23:00-08:00 上报计数,
                     # 之前这个整点只是空转通用巡检, 从未真正上报过夜猫事件。
@@ -508,7 +537,7 @@ class Scheduler:
         if daily_chat_targets:
             daily_chat_count = self._run_daily_chat_batch(daily_chat_targets)
 
-        self.log(f"巡检完成：Token保活 {refreshed_count} 个，国内签到 {checkin_count} 个，活跃上报 {report_count} 个，猫猫日常 {travel_count} 个，国际活跃 {daily_chat_count} 个")
+        self.log(f"巡检完成：Token保活 {refreshed_count} 个，国内签到 {checkin_count} 个，成长任务新增 {growth_credit_total} 积分({growth_count}个号)，活跃上报 {report_count} 个，猫猫日常 {travel_count} 个，国际活跃 {daily_chat_count} 个")
 
     def _daily_chat_concurrency(self):
         directory = getattr(self.pool, "dir", "") or ""
@@ -724,11 +753,12 @@ class Scheduler:
 
         checkin = _hhmm(self.checkin_hours)
         travel = _hhmm(self.travel_hours)
+        growth = _hhmm(self.growth_hours)
         keepalive = _hhmm(self.keepalive_hours)
         cat = _hhmm(self.cat_hours)
-        mode_cn = ("整点排程 (签到 %s · 猫猫旅行 %s · 每日活跃上报 · "
+        mode_cn = ("整点排程 (签到 %s · 猫猫旅行 %s · 成长任务 %s · 每日活跃上报 · "
                    "Token保活 %s · 夜猫 %s) + 模型额度窗口探针"
-                   % (checkin, travel, keepalive, cat))
+                   % (checkin, travel, growth, keepalive, cat))
         mode_intl = ("账号 Token 自动保活与凭证常驻 (每日 %s 集中巡检) "
                      "+ 模型额度窗口探针" % keepalive)
         return {

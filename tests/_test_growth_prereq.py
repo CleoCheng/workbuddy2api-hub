@@ -304,6 +304,70 @@ class GrowthPrereqTests(unittest.TestCase):
         self.assertEqual(events[0]["name"], "无畏契约拼豆专家")
         self.assertEqual(earned, 100)
 
+    def test_new_expert_tasks_use_registered_experts(self):
+        """测试 4 个新专家任务优先使用登记的真实 id。"""
+        for code, expected_id in [
+            ("expert_use_maidehao", "ex_GDl31WahyIH0"),
+            ("expert_use_douyinyin", "ex_FbY5nlWTqDod"),
+            ("expert_use_shangjia_xuanchuan", "ex_Weo3x2EZuSDm"),
+            ("expert_use_bowangwang", "ex_WZY136wV5aMt"),
+        ]:
+            events = []
+            state = {"completed": False}
+
+            def fetch(acc):
+                status = "completed" if state["completed"] else "accepted"
+                return [_task(code, status=status,
+                              current=1 if state["completed"] else 0, target=1)]
+
+            def report(acc, evs, base=None):
+                events.extend(evs)
+                state["completed"] = True
+                return True
+
+            original = (T.fetch_growth_tasks, T.report_events, T.claim_task)
+            T.fetch_growth_tasks = fetch
+            T.report_events = report
+            T.claim_task = lambda acc, c: {"ok": True, "credit": 50}
+            try:
+                earned = T._progress_one(
+                    FakeAccount(), _task(code, status="accepted"), [], 0)
+            finally:
+                (T.fetch_growth_tasks, T.report_events, T.claim_task) = original
+
+            self.assertEqual(events[0]["id"], expected_id)
+            self.assertEqual(earned, 50)
+
+    def test_dynamic_expert_extraction_from_jump_url(self):
+        """测试未来未知专家任务可自动从跳转链接中提取 expertId 并上报。"""
+        events = []
+        state = {"completed": False}
+        unreg_code = "expert_use_unregistered_future"
+        deep = "https://www.workbuddy.cn/work/launch/?deeplink=workbuddy%3A%2F%2Fexperts%3FexpertId%3Dex_Future999&buddy_type=workbuddy"
+
+        def fetch(acc):
+            status = "completed" if state["completed"] else "accepted"
+            return [_task(unreg_code, status=status, jump_url=deep,
+                          current=1 if state["completed"] else 0, target=1)]
+
+        def report(acc, evs, base=None):
+            events.extend(evs)
+            state["completed"] = True
+            return True
+
+        original = (T.fetch_growth_tasks, T.report_events, T.claim_task)
+        T.fetch_growth_tasks = fetch
+        T.report_events = report
+        T.claim_task = lambda acc, c: {"ok": True, "credit": 50}
+        try:
+            earned = T._progress_one(
+                FakeAccount(), _task(unreg_code, status="accepted", jump_url=deep, name="未来专家"), [], 0)
+        finally:
+            (T.fetch_growth_tasks, T.report_events, T.claim_task) = original
+
+        self.assertEqual(events[0]["id"], "ex_Future999")
+        self.assertEqual(earned, 50)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

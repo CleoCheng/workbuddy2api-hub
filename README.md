@@ -38,7 +38,7 @@ This project is for protocol research and personal use only. Prefer the official
 - **模型目录对齐官方桌面端**：剔除补全通道与专线变体，能力与规格按桌面端宣告，上游新模型无需发版即进 `/v1/models`；
 - **设备指纹隔离 (`derive_id`)**：以账号 UID 稳定派生机器码与会话标识，同一账号不漂移、不同账号互不关联；
 - **账号接入**：看板点链接走浏览器 OAuth；Windows 上还能直接从运行中的桌面客户端导入（加密 token 就地解密），macOS / Linux 可手动粘贴解码密钥后导入；
-- **每日自动化**：国内版签到 / 成长与积分任务 / 猫猫旅行；国际版每日活跃打卡（真跑完网页会话）；后台调度器按 09:00 & 21:00、22:00、01:00 排程；
+- **每日自动化**：国内版签到 / 成长与积分任务 / 猫猫旅行；国际版每日活跃打卡（真跑完网页会话）；后台调度器按 08:00 & 21:00、22:00、01:00 排程；
 - **限额护栏**：保留积分 · 每日 Token · 每日积分 · 按模型 Token 四条账号级护栏，单账号独立计数，本地 0 点解封（默认全部关闭）；
 - **OpenRouter 价估算**：把 token 折算成等价花费（人民币 / 美元可切），逐条请求可悬停查看定价来源；
 - **多 Key 与出口绑定**：每个 Key 可固定走国际版或国内版、可限定模型，用量按 Key 归属；
@@ -236,7 +236,7 @@ python tests/run_all.py realm      # 只跑名字里含 realm 的
 
 常驻后台，按固定整点执行自动化运维排程：
 
-- **每日 09:00 & 21:00**：国内版账号自动签到、对话活跃上报（点亮连登）与猫猫旅行闭环；国际版账号执行每日活跃打卡（领官方每日 30/50 积分福利）；
+- **每日 08:00 & 21:00**：国内版账号自动签到、成长任务自动巡检（08:00）、对话活跃上报（点亮连登）与猫猫旅行闭环；国际版账号执行每日活跃打卡（领官方每日 30/50 积分福利）；
 - **每日 22:00**：集中扫描全库账号，Token 剩余寿命不足 2 小时自动调用 Refresh Token 保活；
 - **每日 01:00**：深夜时段执行夜猫子任务；
 - 看板顶部另有「立即巡检保活」与「每日活跃打卡 (国际版)」可随时手动触发。
@@ -532,6 +532,17 @@ export ANTHROPIC_API_KEY="你在看板设置中添加并绑定的API_Key"
 
 
 <!-- 发版时：把下面的 Unreleased 段落整理成新版本号（## vX.Y.Z），整体移入 docs/CHANGELOG.md 顶部 -->
+
+- **成长任务接入每日定时调度 & 早间排程提至 08:00**：
+  - 后台调度器默认排程调整为：每日 08:00、21:00 签到与猫猫旅行，每日 08:00 自动巡检成长任务（避开 09:00 上班高峰）；
+  - 成长任务新增每日账号级门禁（`can_run_growth_tasks()` 与 `record_growth_tasks()`），每天仅自动巡检 1 轮；已领取的任务秒级跳过（零事件伪造上报），新号或新活动自动补齐点亮并领奖；`settings.json` 支持 `growth_daily_enabled` 开关；
+  - 任务规格表新增当前官方 4 个限时专家活动（`expert_use_maidehao` 智能营销专家、`expert_use_douyinyin` 视频脚本大师、`expert_use_shangjia_xuanchuan` 商家主页与海报大师、`expert_use_bowangwang` 直播运营专家），每个账号可多领 +200 积分与 +20 能量；
+  - 增加自适应专家任务提取机制：未来若官方上线新专家活动，系统自动从跳转深链提取 `expertId` 自动上报点亮；未适配的其它未知任务输出醒目日志提醒。
+  / **Growth tasks wired into daily schedule & morning schedule moved to 08:00**:
+  - Default background schedule adjusted to 08:00 & 21:00 for checkin and cat travel, and 08:00 for automatic daily growth task sweeps (ahead of 09:00 work start);
+  - Growth tasks gain a per-account daily gate (`can_run_growth_tasks()` & `record_growth_tasks()`), running once per day; claimed tasks are skipped instantly with zero event forging, while new accounts or new campaign tasks are completed and claimed automatically; controllable via `growth_daily_enabled`;
+  - TASK_SPECS adds the 4 active official expert tasks (intelligent marketing, video script, merchant homepage & poster, livestream operations, +200 credits & +20 energy per account);
+  - Added dynamic expert task parsing from jump URLs for future campaigns, and prominent logging for unrecognized tasks.
 
 - **v1.10.1 发布**：429 响应带上绝对恢复时刻（#720）、工具名称校验丢弃非法条目防 11133（#726）、CodeArts 发送会话头修掉并发上限与排队（#723）、代理槽账号密码认证与格式规整（#648）。完整变更、验证范围与已知限制见 **[docs/CHANGELOG.md](docs/CHANGELOG.md#v1101)**；下一版的改动继续写在本段。
 - **v1.10.0 发布**：集成 CodeArts 原生第三出口（#712/#715）、请求体上限面板动态调节（#709/#714）、Key 账号选择器搜索备注（#708/#717）、今日活动无记录状态优化（#706/#716）、最近请求跨天日期显示（#700/#713）与设置卡片重复修复（#710）。完整变更、验证范围与已知限制见 **[docs/CHANGELOG.md](docs/CHANGELOG.md#v1100)**；下一版的改动继续写在本段。

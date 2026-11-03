@@ -1165,12 +1165,13 @@ def set_keep_backups(accounts_dir, value):
 
 #: 后台排程时段（CST 24 小时制）。默认值与旧版硬编码完全一致，老安装行为不变。
 DEFAULT_SCHEDULE_HOURS = {
-    "checkin": [9, 21],
-    "travel": [9, 21],
+    "checkin": [8, 21],
+    "travel": [8, 21],
     "keepalive": [22],
     "cat": [1],
+    "growth": [8],
 }
-SCHEDULE_KEYS = ("checkin", "travel", "keepalive", "cat")
+SCHEDULE_KEYS = ("checkin", "travel", "keepalive", "cat", "growth")
 
 
 def _normalize_hours(value):
@@ -1240,6 +1241,19 @@ def set_schedule_hours(accounts_dir, value):
         data["schedule"] = merged
         save(accounts_dir, data)
     return merged
+
+
+def growth_daily_enabled(accounts_dir):
+    """True when scheduled daily growth tasks are enabled (default True)."""
+    return load(accounts_dir).get("growth_daily_enabled", True) is not False
+
+
+def set_growth_daily_enabled(accounts_dir, enabled):
+    """Persist the growth tasks schedule switch."""
+    with _lock:
+        data = load(accounts_dir)
+        data["growth_daily_enabled"] = bool(enabled)
+        save(accounts_dir, data)
 
 
 #: 网页活跃（国际版每日活跃）的独立时段，HH:MM。空表示跟随 checkin 整点，
