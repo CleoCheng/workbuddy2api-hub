@@ -11508,6 +11508,9 @@ def curate_remote_catalog(realm, ids, meta=None):
         carries;
       - when a free ("x0.00") sibling exists, the free one is the one the
         picker shows, so the paid sibling is dropped;
+      - when upstream only names the paid variant (e.g. -sg) and drops
+        the base name, normalize to the base name so the picker keeps it and
+        inherits its metadata (including live credits);
       - everything else keeps its upstream order. Names the upstream does not
         list at all stay available through the curated order tables and the
         bundled snapshot, which merge_catalog() keeps.
@@ -11527,6 +11530,25 @@ def curate_remote_catalog(realm, ids, meta=None):
         if not is_chat_model(mid):
             continue
         if mid.endswith(VARIANT_SUFFIXES):
+            base = None
+            for sfx in VARIANT_SUFFIXES:
+                if mid.endswith(sfx):
+                    base = mid[:-len(sfx)]
+                    break
+            if base and base not in ids and is_chat_model(base):
+                if isinstance(meta, dict) and mid in meta:
+                    base_meta = dict(meta[mid])
+                    base_meta["id"] = base
+                    meta.setdefault(base, base_meta)
+                    credits[base] = str(base_meta.get("credits") or "").strip().lower()
+                if base.endswith("-f"):
+                    b = base[:-2]
+                    if b in ids and free(b) and not free(base):
+                        continue
+                elif (base + "-f") in ids and free(base + "-f") and not free(base):
+                    continue
+                if base not in out:
+                    out.append(base)
             continue
         if mid.endswith("-f"):
             base = mid[:-2]

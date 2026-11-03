@@ -161,6 +161,30 @@ class RemoteCatalogTests(unittest.TestCase):
              "glm-5.3": {"credits": "x0.79"}}
         self.assertEqual(P.curate_remote_catalog("intl", ids, meta), ids)
 
+    def test_curate_inherits_variant_when_base_is_missing(self):
+        # Upstream intl now only sends deepseek-v4.1-flash-sg (x0.11), omitting deepseek-v4.1-flash.
+        # curate_remote_catalog must normalize it to deepseek-v4.1-flash and inherit metadata & credits.
+        ids = ["deepseek-v4.1-flash-sg", "gpt-6-astra"]
+        meta = {
+            "deepseek-v4.1-flash-sg": {
+                "id": "deepseek-v4.1-flash-sg",
+                "name": "Deepseek-V4.1-Flash",
+                "credits": "x0.11",
+            },
+            "gpt-6-astra": {"credits": "x1.50"},
+        }
+        curated = P.curate_remote_catalog("intl", ids, meta)
+        self.assertIn("deepseek-v4.1-flash", curated)
+        self.assertNotIn("deepseek-v4.1-flash-sg", curated)
+        self.assertEqual(meta["deepseek-v4.1-flash"]["credits"], "x0.11")
+        self.assertEqual(meta["deepseek-v4.1-flash"]["name"], "Deepseek-V4.1-Flash")
+
+        P.fetch_remote_product_config = lambda realm: (ids, meta) if realm == "intl" else None
+        P._models_cache["intl"] = {"at": 0.0, "data": None}
+        entries = dict(P.fetch_models("intl"))
+        self.assertIn("deepseek-v4.1-flash", entries)
+        self.assertEqual(entries["deepseek-v4.1-flash"]["credits"], "x0.11")
+
     def test_fetch_models_uses_the_remote_and_orders_by_the_table(self):
         P.fetch_remote_product_config = (
             lambda realm: (INTL_IDS, INTL_META) if realm == "intl" else None)
