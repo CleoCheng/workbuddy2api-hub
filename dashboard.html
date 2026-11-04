@@ -16643,8 +16643,8 @@ function renderProxyNodeChoices(){
   const rows=(data.nodes || []).map((n,i)=>({n,i})).filter(({n})=>[n.node,n.ip,n.country,n.country_code].join(' ').toLowerCase().includes(filter));
   document.getElementById('proxyNodeChoices').innerHTML=rows.length?'<div class="table-wrap"><table class="data-cards"><thead><tr>'
     +['节点','出口 IP','延迟','类型','操作'].map(t=>'<th>'+slotBatchText(t)+'</th>').join('')+'</tr></thead><tbody>'
-    +rows.map(({n,i})=>'<tr><td>'+esc(n.node)+'<br><small>'+esc(n.country || n.country_code || '')+'</small></td><td class="mono">'+esc(n.ip)+'</td>'
-      +'<td><span class="slot-latency slot-latency-'+(n.latency_ms<=300?'ok':n.latency_ms<=800?'warn':'bad')+'">'+Number(n.latency_ms)+' ms</span></td>'
+    +rows.map(({n,i})=>'<tr><td>'+esc(n.node)+'<br><small>'+esc(n.country || n.country_code || '')+'</small></td><td class="mono">'+esc(n.ip || '—')+'</td>'
+      +'<td>'+(n.latency_ms>0?'<span class="slot-latency slot-latency-'+(n.latency_ms<=300?'ok':n.latency_ms<=800?'warn':'bad')+'">'+Number(n.latency_ms)+' ms</span>':'<span style="color:var(--dim)">'+slotBatchText('未测速')+'</span>')+'</td>'
       +'<td>'+esc(ipTypeLabel(n.ip_type) || slotBatchText('未知'))+'</td><td>'
       +(n.selectable?'<button class="sec mini" onclick="chooseProxyNode('+i+',this)"'+(PROXY_NODE_BUSY?' disabled':'')+'>'+slotBatchText('更换')+'</button>'
         :esc(slotBatchText(n.unavailable_reason==='exit_occupied'?'已被其他槽位占用':'国家限制')))

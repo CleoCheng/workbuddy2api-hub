@@ -404,16 +404,26 @@ class Monitor:
         live = self._api(cfg, '/proxies')['proxies']
         group = live.get(cfg['groups'][sid], {})
         current = group.get('now', '')
-        occupied = {r.get('ip') for k, r in rows.items() if k != sid}
+        occupied = {r.get('ip') for k, r in rows.items() if k != sid and r.get('ip')}
         used = {live.get(g, {}).get('now') for k, g in cfg['groups'].items() if k != sid}
         nodes = []
+        seen = set()
         for result in ranking.get('ranked', []):
-            if result['node'] not in group.get('all', []) or result['node'] == current:
+            node_name = result['node']
+            if node_name not in group.get('all', []) or node_name == current or node_name == 'REJECT':
                 continue
-            reason = ('exit_occupied' if result['ip'] in occupied or result['node'] in used else
+            seen.add(node_name)
+            reason = ('exit_occupied' if (result.get('ip') and result['ip'] in occupied) or node_name in used else
                       'country_restricted' if not cfg['allow_cross_country'] and
                       (not slot.get('country_code') or result.get('country_code') != slot['country_code']) else '')
             nodes.append(dict(result, selectable=not reason, unavailable_reason=reason))
+        for node_name in group.get('all', []):
+            if node_name in seen or node_name == current or node_name == 'REJECT':
+                continue
+            seen.add(node_name)
+            reason = 'exit_occupied' if node_name in used else ''
+            nodes.append(dict(node=node_name, ip='', latency_ms=0, country='', country_code='',
+                              isp='', asn='', ip_type='', selectable=not reason, unavailable_reason=reason))
         return dict(id=sid, current=current, manual=bool(rows.get(sid, {}).get('manual')),
                     nodes=nodes, scanning=ranking.get('scanning', False),
                     tested_at=ranking.get('completed_at', 0), enabled=cfg['enabled'])
@@ -438,9 +448,27 @@ class Monitor:
                 self._record(sid, 'resume_auto')
                 self.trigger()
                 return dict(ok=True, automatic=True)
+            live = self._api(cfg, '/proxies')['proxies']
+            group = live.get(cfg['groups'][sid], {})
+            if node not in group.get('all', []):
+                raise ValueError('node_not_found_in_group')
             candidate = next((r for r in self.ranking.get('ranked', []) if r['node'] == node), None)
             if not candidate:
-                raise ValueError('measured_candidate_required')
+                try:
+                    probe = self._candidate_probe(cfg, node)
+                except Exception:
+                    probe = dict(ok=False, error='candidate_probe_failed')
+                if not probe.get('ok'):
+                    raise ValueError(probe.get('error') or 'candidate_probe_failed')
+                candidate = dict(probe, node=node, tested_at=time.time())
+                ip = probe.get('ip')
+                if ip:
+                    candidate.update(wb_ipintel.lookup(ip))
+                with self.lock:
+                    results = [r for r in self.ranking.get('results', []) if r['node'] != node]
+                    results.append(candidate)
+                    ranked = rank_exits(results, cfg['residential_tie_pct'])
+                    self.ranking.update(results=results, ranked=ranked)
             live = self._api(cfg, '/proxies')['proxies']
             with ThreadPoolExecutor(max_workers=4) as ex:
                 probes = list(ex.map(lambda s: self._probe(s['url'], cfg['timeout']), slots))
@@ -828,13 +856,16 @@ class Monitor:
                 try:
                     # Re-probe even cached candidates: a subscription's exit may rotate.
                     probe = self._candidate_probe(cfg, node)
-                    if not probe['ok'] or probe['ip'] != candidate['ip'] or probe['ip'] in occupied:
+                    if not probe['ok'] or probe['ip'] in occupied or (reason != 'manual' and probe['ip'] != candidate['ip']):
                         with self.lock:
                             for result in self.ranking.get('results', []):
                                 if result['node'] == node:
                                     result['ok'] = False
                             self.ranking['ranked'] = rank_exits(self.ranking.get('results', []), cfg['residential_tie_pct'])
                         continue
+                    if reason == 'manual' and probe['ip'] != candidate.get('ip'):
+                        candidate['ip'] = probe['ip']
+                        candidate.update(wb_ipintel.lookup(probe['ip']))
                     if reason == 'slow' and probe['latency_ms'] > row.get('latency_ms', 0) * (1 - cfg['improvement_pct'] / 100):
                         continue
                     live = self._api(cfg, '/proxies')['proxies']

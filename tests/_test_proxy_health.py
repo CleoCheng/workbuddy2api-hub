@@ -474,6 +474,26 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(len({r['ip'] for r in self.mon.rows.values()}), 2)
         self.assertTrue(all(r['status'] == 'healthy' for r in self.mon.rows.values()))
 
+    def test_node_choices_and_manual_switch_support_unmeasured_nodes(self):
+        self.ranked_fixture()
+        self.rounds(1)
+        # Add a fresh node that has not been scanned/ranked yet
+        self.ips['fresh-1'] = '8.8.8.9'
+        self.delays['fresh-1'] = 150
+        data = self.mon.node_choices('slot-1')
+        fresh = next((n for n in data['nodes'] if n['node'] == 'fresh-1'), None)
+        self.assertIsNotNone(fresh, 'Unmeasured node from group must appear in node_choices')
+        self.assertTrue(fresh['selectable'])
+        self.assertEqual(fresh['unavailable_reason'], '')
+
+        # Test manual switch to this unmeasured node
+        result = self.mon.manual_switch('slot-1', 'fresh-1')
+        self.assertTrue(result['ok'])
+        self.assertEqual(self.mon.rows['slot-1']['node'], 'fresh-1')
+        self.assertEqual(self.mon.rows['slot-1']['ip'], '8.8.8.9')
+        self.assertTrue(self.mon.rows['slot-1']['manual'])
+        self.assertIn('fresh-1', [r['node'] for r in self.mon.ranking['ranked']])
+
     def test_same_region_candidate_prioritization(self):
         slot = {'country_code': 'US', 'country': '美国'}
         candidates = [
