@@ -302,6 +302,36 @@ class GrowthTaskGatingTests(unittest.TestCase):
             self.assertFalse(acc_intl.can_run_growth_tasks())
 
 
+class GrowthAutoAndStatusTests(unittest.TestCase):
+    def test_growth_tasks_concurrency_lock_skips_running(self):
+        import threading
+        import wb_tasks
+        acc = account("uid-lock", realm="cn")
+        lock = threading.Lock()
+        lock.acquire()
+        acc._growth_lock = lock
+        try:
+            res = wb_tasks.run_growth_tasks(acc)
+            self.assertTrue(res.get("skipped_running"))
+            self.assertFalse(res.get("ok"))
+        finally:
+            lock.release()
+
+    def test_growth_tasks_status_inspection_skips_when_all_claimed(self):
+        import wb_tasks
+        acc = account("uid-claimed", realm="cn")
+        tasks = [
+            {"task_code": "t1", "status": "claimed", "current": 1, "target": 1, "task_type": "single"},
+            {"task_code": "t2", "status": "claimed", "current": 1, "target": 1, "task_type": "auto"},
+        ]
+        with mock.patch.object(wb_tasks, "fetch_growth_tasks", return_value=tasks), \
+                mock.patch.object(wb_tasks, "do_cat_travel", return_value={"msg": "", "credit": 0}), \
+                mock.patch.object(acc, "fetch_credits"):
+            res = wb_tasks.run_growth_tasks(acc)
+            self.assertTrue(res.get("ok"))
+            self.assertTrue(res.get("all_completed"))
+
+
 if __name__ == "__main__":
     unittest.main()
 

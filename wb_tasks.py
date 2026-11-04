@@ -691,75 +691,124 @@ def run_growth_tasks(account, gap=1.0, claim=True):
     if getattr(account, "is_enterprise", lambda: False)():
         return {"ok": True, "msg": "企业版账号无成长体系，跳过", "logs": []}
 
-    logs = []
-    logs.append(f"开始为账号 {account.nickname or account.uid[:8]} 运行成长任务自动化...")
-    tasks = fetch_growth_tasks(account)
-    if not tasks:
-        logs.append("未能获取到任务清单，请检查网络或账号状态")
-        return {"ok": False, "logs": logs, "earned_credit": 0}
+    # 单账号并发保护锁：防止后台自动任务、巡检与手动批量重复打同一账号
+    lock = getattr(account, "_growth_lock", None)
+    if lock is None:
+        import threading
+        lock = threading.Lock()
+        account._growth_lock = lock
+    if not lock.acquire(blocking=False):
+        nick = account.nickname or account.uid[:8]
+        return {
+            "ok": False,
+            "msg": f"账号 {nick} 当前已有成长任务正在执行中，已自动跳过避免并发冲突",
+            "logs": ["当前已有成长任务正在执行中，已自动跳过避免并发冲突"],
+            "earned_credit": 0,
+            "skipped_running": True,
+        }
 
-    total_earned = 0
-
-    # 0. auto 类任务（如 first_buddy）不需要接取，且可能是其他任务与猫猫旅行
-    #    的前置：必须先把它们点亮并领奖（first_buddy 的奖励就是 Buddy 实例），
-    #    否则 single 任务接取会报 "prerequisite not met: first_buddy"。
-    for t in tasks:
-        if t.get("task_type") == "auto":
-            total_earned += _progress_one(account, t, logs, gap, claim=claim)
-
-    # 1. 批量接取未接任务（auto 类不接受接取，unforgeable 无法自动化）
-    def _needs_accept(x):
-        return (x["status"] == "not_accepted" and not x.get("unforgeable")
-                and x.get("task_type") != "auto")
-
-    unaccepted = [t["task_code"] for t in tasks if _needs_accept(t)]
-    if unaccepted:
-        logs.append(f"发现 {len(unaccepted)} 个待接取任务，正在批量接取...")
-        acc = accept_tasks(account, unaccepted)
-        if acc.get("failed"):
-            why = acc.get("msg") or ("; ".join(acc.get("reasons") or [])[:160])
-            logs.append(f"! 接取未成功 {len(acc['failed'])} 个: {', '.join(acc['failed'][:5])}"
-                        + (" ..." if len(acc["failed"]) > 5 else "")
-                        + (f" ({why})" if why else ""))
-        if acc.get("accepted"):
-            logs.append(f"✓ 已接取 {len(acc['accepted'])} 个任务")
-        time.sleep(gap)
+    try:
+        logs = []
+        logs.append(f"开始为账号 {account.nickname or account.uid[:8]} 运行成长任务自动化...")
         tasks = fetch_growth_tasks(account)
-        # 复核一次: 上游偶尔会瞬时拒绝整个批次, 复查后仍处于未接取的再补一次,
-        # 否则后面所有上报都作用在未接取的任务上 —— 进度全是 0。
-        still = [t["task_code"] for t in tasks if _needs_accept(t)]
-        if still:
-            logs.append(f"仍有 {len(still)} 个未接取，重试接取一次...")
-            retry = accept_tasks(account, still)
-            if retry.get("accepted"):
-                logs.append(f"✓ 重试接取成功 {len(retry['accepted'])} 个")
+        if not tasks:
+            logs.append("未能获取到任务清单，请检查网络或账号状态")
+            return {"ok": False, "logs": logs, "earned_credit": 0}
+
+        # 巡检当前任务状态：过滤出所有未完成或待领奖的任务
+        actionable_auto = [t for t in tasks if t.get("task_type") == "auto" and t.get("status") != "claimed"]
+        actionable_single = [t for t in tasks if t.get("status") != "claimed" and t.get("task_type") != "auto"]
+        if not actionable_auto and not actionable_single:
+            # 所有任务均已完成并已领奖，顺手检查猫猫旅行即可
+            tr_res = do_cat_travel(account)
+            travel_credit = tr_res.get("credit", 0) if tr_res.get("msg") else 0
+            logs.append("✓ 状态巡检：该账号所有可执行成长任务均已完成并已领奖，无待办任务")
+            if tr_res.get("msg"):
+                logs.append(f"猫猫日常: {tr_res.get('msg')}")
+            try:
+                account.fetch_credits()
+            except Exception:
+                pass
+            credits_obj = getattr(account, "credits", {}) or {}
+            remain = credits_obj.get("remain", 0) if isinstance(credits_obj, dict) else 0
+            logs.append(f"🎉 全部完成！本次累计新增到账: +{travel_credit} 积分，当前总剩余: {remain} 积分")
+            return {
+                "ok": True,
+                "logs": logs,
+                "earned_credit": travel_credit,
+                "all_completed": True,
+                "credits": getattr(account, "credits", None),
+            }
+
+        total_earned = 0
+
+        # 0. auto 类任务（如 first_buddy）不需要接取，且可能是其他任务与猫猫旅行
+        #    的前置：必须先把它们点亮并领奖（first_buddy 的奖励就是 Buddy 实例），
+        #    否则 single 任务接取会报 "prerequisite not met: first_buddy"。
+        for t in tasks:
+            if t.get("task_type") == "auto":
+                total_earned += _progress_one(account, t, logs, gap, claim=claim)
+
+        # 1. 批量接取未接任务（auto 类不接受接取，unforgeable 无法自动化）
+        def _needs_accept(x):
+            return (x["status"] == "not_accepted" and not x.get("unforgeable")
+                    and x.get("task_type") != "auto")
+
+        unaccepted = [t["task_code"] for t in tasks if _needs_accept(t)]
+        if unaccepted:
+            logs.append(f"发现 {len(unaccepted)} 个待接取任务，正在批量接取...")
+            acc = accept_tasks(account, unaccepted)
+            if acc.get("failed"):
+                why = acc.get("msg") or ("; ".join(acc.get("reasons") or [])[:160])
+                logs.append(f"! 接取未成功 {len(acc['failed'])} 个: {', '.join(acc['failed'][:5])}"
+                            + (" ..." if len(acc["failed"]) > 5 else "")
+                            + (f" ({why})" if why else ""))
+            if acc.get("accepted"):
+                logs.append(f"✓ 已接取 {len(acc['accepted'])} 个任务")
             time.sleep(gap)
             tasks = fetch_growth_tasks(account)
-        if not tasks:
-            logs.append("! 接取后无法获取任务清单，本轮中止")
-            return {"ok": False, "logs": logs, "earned_credit": total_earned}
-        still_pending = [t["task_code"] for t in tasks if _needs_accept(t)]
-        if still_pending:
-            logs.append(f"! 仍有 {len(still_pending)} 个任务处于未接取状态，"
-                        f"对未接取任务上报事件不会计入进度，本轮跳过这些任务")
+            # 复核一次: 上游偶尔会瞬时拒绝整个批次, 复查后仍处于未接取的再补一次,
+            # 否则后面所有上报都作用在未接取的任务上 —— 进度全是 0。
+            still = [t["task_code"] for t in tasks if _needs_accept(t)]
+            if still:
+                logs.append(f"仍有 {len(still)} 个未接取，重试接取一次...")
+                retry = accept_tasks(account, still)
+                if retry.get("accepted"):
+                    logs.append(f"✓ 重试接取成功 {len(retry['accepted'])} 个")
+                time.sleep(gap)
+                tasks = fetch_growth_tasks(account)
+            if not tasks:
+                logs.append("! 接取后无法获取任务清单，本轮中止")
+                return {"ok": False, "logs": logs, "earned_credit": total_earned}
+            still_pending = [t["task_code"] for t in tasks if _needs_accept(t)]
+            if still_pending:
+                logs.append(f"! 仍有 {len(still_pending)} 个任务处于未接取状态，"
+                            f"对未接取任务上报事件不会计入进度，本轮跳过这些任务")
 
-    # 2. 处理每个任务（auto 已在第 0 步处理过）
-    for t in tasks:
-        if t.get("task_type") == "auto":
-            continue
-        total_earned += _progress_one(account, t, logs, gap, claim=claim)
+        # 2. 处理每个任务（auto 已在第 0 步处理过）
+        for t in tasks:
+            if t.get("task_type") == "auto":
+                continue
+            total_earned += _progress_one(account, t, logs, gap, claim=claim)
 
-    # 3. 顺手检查猫猫旅行
-    tr_res = do_cat_travel(account)
-    if tr_res.get("msg"):
-        logs.append(f"猫猫日常: {tr_res.get('msg')}")
-        if tr_res.get("credit"):
-            total_earned += tr_res.get("credit", 0)
+        # 3. 顺手检查猫猫旅行
+        tr_res = do_cat_travel(account)
+        if tr_res.get("msg"):
+            logs.append(f"猫猫日常: {tr_res.get('msg')}")
+            if tr_res.get("credit"):
+                total_earned += tr_res.get("credit", 0)
 
-    # 4. 刷新积分余额
-    account.fetch_credits()
-    logs.append(f"🎉 全部完成！本次累计新增到账: +{total_earned} 积分，当前总剩余: {account.credits.get('remain', 0)} 积分")
-    return {"ok": True, "logs": logs, "earned_credit": total_earned, "credits": account.credits}
+        # 4. 刷新积分余额
+        try:
+            account.fetch_credits()
+        except Exception:
+            pass
+        credits_obj = getattr(account, "credits", {}) or {}
+        remain = credits_obj.get("remain", 0) if isinstance(credits_obj, dict) else 0
+        logs.append(f"🎉 全部完成！本次累计新增到账: +{total_earned} 积分，当前总剩余: {remain} 积分")
+        return {"ok": True, "logs": logs, "earned_credit": total_earned, "credits": getattr(account, "credits", None)}
+    finally:
+        lock.release()
 
 
 def run_night_growth(account):

@@ -4415,6 +4415,11 @@ class AccountPool(object):
 
         if added or updated:
             self.apply_proxy_slots()
+        if added:
+            for uid in added:
+                acc = self.get(uid)
+                if acc and acc.realm == "cn" and not acc.is_api_key and acc.task_active():
+                    _auto_run_growth_async(acc)
         return {
             "added": added,
             "updated": updated,
@@ -5165,6 +5170,7 @@ class AccountPool(object):
         if realm == "cn":
             try: account.checkin(trigger="account_add")
             except Exception: pass
+            _auto_run_growth_async(account)
         with self._lock: self.logins.pop(state, None)
         return {"status": "ok", "account": account.public()}
 
@@ -5217,7 +5223,38 @@ class AccountPool(object):
         if detected_realm == "cn":
             try: account.checkin(trigger="account_import")
             except Exception: pass
+            _auto_run_growth_async(account)
         return account
+
+
+def _auto_run_growth_async(account):
+    """新添加的国内账号在后台异步线程执行首次成长任务，避免阻塞登录或导入响应。"""
+    if getattr(account, "realm", "") != "cn":
+        return None
+    if getattr(account, "is_api_key", False):
+        return None
+    if getattr(account, "is_enterprise", lambda: False)():
+        return None
+    if not getattr(account, "tasks_enabled", True):
+        return None
+
+    def _worker():
+        try:
+            time.sleep(1.0)
+            import wb_tasks
+            wb_tasks.run_growth_tasks(account, gap=1.0, claim=True)
+            if hasattr(account, "record_growth_tasks"):
+                try:
+                    account.record_growth_tasks()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+    t = threading.Thread(target=_worker, name=f"growth-auto-{account.uid[:8]}", daemon=True)
+    t.start()
+    return t
+
 
 def desktop_atrest_key(force=False, log=None):
     """拿到桌面端 at-rest 密钥（内存里有就直接用，没有才去进程内存里找回）。

@@ -21776,7 +21776,7 @@ class Handler(BaseHTTPRequestHandler):
         for i, acc in enumerate(targets):
             uid_str = acc.uid[:8] if acc.uid else "?"
             nick = acc.nickname or uid_str
-            combined_logs.append(f"====== 正在为账号 [{nick} ({acc.uid})] 执行全自动成长任务 ({i+1}/{len(targets)}) ======")
+            combined_logs.append(f"====== 正在为账号 [{nick} ({acc.uid})] 巡检并执行成长任务 ({i+1}/{len(targets)}) ======")
             res = run_growth_tasks(acc, gap=1.0, claim=claim)
             if hasattr(acc, "record_growth_tasks"):
                 try:
