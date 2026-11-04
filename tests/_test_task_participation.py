@@ -73,6 +73,71 @@ class AccountFlagTests(unittest.TestCase):
              "realm": "cn"})
         self.assertTrue(default["tasksEnabled"])
 
+    def test_import_row_cn_defaults_to_disabled_and_tasks_enabled(self):
+        # 国内版账号导入时，默认停用 API 调度 (enabled=False)，但打开任务开关 (tasksEnabled=True)
+        cn_row = {"uid": "uid-cn", "accessToken": jwt("uid-cn"), "realm": "cn"}
+        kwargs_cn = wb_accounts.normalise_import_row(cn_row)
+        self.assertFalse(kwargs_cn["enabled"])
+        self.assertTrue(kwargs_cn["tasksEnabled"])
+
+        # 国际版账号导入时，保持默认启用 (enabled=True) 与任务开启 (tasksEnabled=True)
+        intl_row = {"uid": "uid-intl", "accessToken": jwt("uid-intl"), "realm": "intl"}
+        kwargs_intl = wb_accounts.normalise_import_row(intl_row)
+        self.assertTrue(kwargs_intl["enabled"])
+        self.assertTrue(kwargs_intl["tasksEnabled"])
+
+        # 若导入行显式指定了 enabled（如备份还原），则尊重显式指定的配置
+        explicit_row = {"uid": "uid-explicit", "accessToken": jwt("uid-explicit"),
+                        "realm": "cn", "enabled": True}
+        kwargs_explicit = wb_accounts.normalise_import_row(explicit_row)
+        self.assertTrue(kwargs_explicit["enabled"])
+        self.assertTrue(kwargs_explicit["tasksEnabled"])
+
+    def test_desktop_import_cn_defaults_disabled_with_tasks_enabled(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cred_path = os.path.join(directory, "cred.json")
+            with open(cred_path, "w", encoding="utf-8") as fh:
+                json.dump({
+                    "account": {"uid": "uid-cn-desk", "nickname": "desk-user"},
+                    "auth": {"accessToken": jwt("uid-cn-desk"), "refreshToken": "r1",
+                             "domain": "www.codebuddy.cn"}
+                }, fh)
+            pool = wb_accounts.AccountPool(directory)
+            acc = pool.import_desktop_credential(path=cred_path, realm="cn")
+            self.assertFalse(acc.enabled)
+            self.assertTrue(acc.tasks_enabled)
+            self.assertTrue(acc.task_active())
+            self.assertFalse(acc.ready())
+
+    def test_pool_add_preserves_switches_when_reauthenticating(self):
+        with tempfile.TemporaryDirectory() as directory:
+            pool = wb_accounts.AccountPool(directory)
+            # 首次添加国内账号：停用 API，开启任务
+            first = wb_accounts.Account({
+                "uid": "uid-reauth",
+                "accessToken": jwt("uid-reauth"),
+                "realm": "cn",
+                "enabled": False,
+                "tasksEnabled": True,
+            })
+            pool.add(first)
+            # 用户在控制台手动开启了 API
+            pool.set_enabled("uid-reauth", enabled=True, tasks_enabled=True)
+            self.assertTrue(pool.get("uid-reauth").enabled)
+
+            # 之后重新扫码登录 / 凭据更新（例如从登录流程生成了一个默认 enabled=False 的 account 实例）
+            refreshed = wb_accounts.Account({
+                "uid": "uid-reauth",
+                "accessToken": jwt("uid-reauth"),
+                "realm": "cn",
+                "enabled": False,
+                "tasksEnabled": True,
+            })
+            pool.add(refreshed)
+            # 用户之前开启的 API 状态应该保留，不被冲掉
+            self.assertTrue(pool.get("uid-reauth").enabled)
+            self.assertTrue(pool.get("uid-reauth").tasks_enabled)
+
 
 class PoolToggleTests(unittest.TestCase):
     def setUp(self):

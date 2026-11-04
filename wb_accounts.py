@@ -4296,6 +4296,11 @@ class AccountPool(object):
                 with account._throttle_lock:
                     account.last_error = ""
                     account.last_error_detail = ""
+                # 重新登录或更新凭证时，保留管理员在面板中已设定的启用与任务开关状态
+                if getattr(existing, "enabled", None) is not None:
+                    account.enabled = existing.enabled
+                if getattr(existing, "tasks_enabled", None) is not None:
+                    account.tasks_enabled = existing.tasks_enabled
                 self.accounts[self.accounts.index(existing)] = account
             else:
                 self.accounts.append(account)
@@ -5141,6 +5146,7 @@ class AccountPool(object):
                 profile_data = profile.get("data") or {}
                 nickname = str(profile_data.get("nickname") or "")
         except Exception: pass
+        is_cn = (realm == "cn")
         account = Account({
             "uid": uid,
             "nickname": nickname or uid[:8],
@@ -5151,7 +5157,9 @@ class AccountPool(object):
             "refreshToken": data.get("refreshToken") or "",
             "expiresAt": normalize_epoch(data.get("expiresAt")) or jwt_exp(token),
             "source": "oauth",
-            "enabled": True,
+            # 国内版账号添加完成后默认停用 API 调度 (enabled=False)，打开任务开关 (tasksEnabled=True)
+            "enabled": False if is_cn else True,
+            "tasksEnabled": True,
         })
         self.add(account)
         if realm == "cn":
@@ -5189,6 +5197,7 @@ class AccountPool(object):
         if key is not None and wb_atrest.is_envelope(nickname):
             # 国内版桌面端把昵称也一起加密了，能解就顺手解出来，省得只显示 UID 前缀
             nickname = wb_atrest.decrypt_field(key, nickname) or ""
+        is_cn = (detected_realm == "cn")
         account = Account({
             "uid": profile.get("uid") or jwt_uid(token),
             "nickname": nickname if isinstance(nickname, str) else "",
@@ -5200,7 +5209,9 @@ class AccountPool(object):
             "refreshToken": desktop_refresh_token(auth, key),
             "expiresAt": normalize_epoch(auth.get("expiresAt")) or jwt_exp(token),
             "source": source,
-            "enabled": True,
+            # 国内版桌面凭据导入完成后默认停用 API 调度 (enabled=False)，打开任务开关 (tasksEnabled=True)
+            "enabled": False if is_cn else True,
+            "tasksEnabled": True,
         })
         self.add(account)
         if detected_realm == "cn":
@@ -5547,6 +5558,14 @@ def normalise_import_row(row, realm=None):
         raise ValueError("cannot determine uid (no uid field and no sub claim)")
 
     tasks_enabled = pick("tasksEnabled")
+    is_cn = (detected == "cn")
+    row_enabled = pick("enabled")
+    if row_enabled is not None:
+        enabled = bool(row_enabled)
+    else:
+        # 国内版账号添加/导入完成后默认停用 API 调度 (enabled=False)，
+        # 国际版保持默认启用 (enabled=True)
+        enabled = False if is_cn else True
     return {
         "uid": uid,
         "nickname": str(pick("nickname") or ""),
@@ -5561,7 +5580,7 @@ def normalise_import_row(row, realm=None):
         "source": str(pick("source") or (SOURCE_API_KEY if api_key else "import")),
         "proxySlot": str(pick("proxySlot") or "").strip(),
         "proxy": str(pick("proxy") or "").strip(),
-        "enabled": True,
+        "enabled": enabled,
         # Imported accounts start with tasks on (they are new to this pool);
         # an export that carries the flag keeps the operator's choice.
         "tasksEnabled": (bool(tasks_enabled)
