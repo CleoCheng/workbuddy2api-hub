@@ -13,6 +13,8 @@ import json
 import os
 import sys
 import tempfile
+import threading
+import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -347,6 +349,156 @@ class TestOpenUpstreamDispatch(unittest.TestCase):
         self.assertEqual(wb_proxy.account_inflight_snapshot(), {})
         first.close()
         second.close()
+
+
+
+
+# ---------------------------------------------------------------------------
+# 亲和账号在飞名额缓冲等待：
+#   若绑定的亲和账号名额已满，短暂等待最多 ACCOUNT_SLOT_WAIT_MAX；
+#   若等待期内名额释放，继续复用原亲和账号以保住会话前缀缓存（KV cache）；
+#   若等待超时仍未释放，加入 busy 并平滑回退到池中其他可用账号。
+# ---------------------------------------------------------------------------
+class TestAffinityWaitQueue(unittest.TestCase):
+    """亲和账号在飞名额已满时的缓冲等待（保住会话前缀缓存）。"""
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp()
+        os.makedirs(os.path.join(self.dir, "accounts"), exist_ok=True)
+        wb_proxy._ACCOUNT_INFLIGHT.clear()
+        self._old_pool = wb_proxy.POOL
+        self._old_urlopen = A.urlopen
+        self._old_dir = wb_proxy.ACCOUNTS_DIR
+        self._old_wait_max = wb_proxy.ACCOUNT_SLOT_WAIT_MAX
+        wb_proxy.ACCOUNTS_DIR = self.dir
+        self.accounts = [self._make_account("uid-a"), self._make_account("uid-b")]
+        wb_proxy.POOL = self._make_pool(self.accounts)
+        self.hits = []
+
+    def tearDown(self):
+        wb_proxy.ACCOUNT_SLOT_WAIT_MAX = self._old_wait_max
+        wb_proxy.POOL = self._old_pool
+        A.urlopen = self._old_urlopen
+        wb_proxy.ACCOUNTS_DIR = self._old_dir
+        wb_proxy._ACCOUNT_INFLIGHT.clear()
+
+    def _make_account(self, uid):
+        return A.Account(
+            {"uid": uid, "accessToken": "t", "realm": "intl"},
+            os.path.join(self.dir, uid + ".json"))
+
+    def _make_pool(self, accounts):
+        class FakeAffinity(object):
+            def __init__(self):
+                self._bindings = {}
+
+            def bind(self, key, uid):
+                self._bindings[key] = uid
+
+            def recent(self, key):
+                uid = self._bindings.get(key)
+                return [uid] if uid else []
+
+            def unbind(self, key):
+                self._bindings.pop(key, None)
+
+            def demote(self, key, uid=None):
+                self._bindings.pop(key, None)
+
+        class Pool(object):
+            def __init__(self):
+                self.affinity = FakeAffinity()
+                self.accounts = accounts
+
+            def count_ready(self, realm, model=None):
+                return len(self.accounts)
+
+            def pick_for_session(self, realm, session_key=None, exclude=(),
+                                 model=None, page=None):
+                bound_uids = self.affinity.recent(session_key) if session_key else []
+                if bound_uids and bound_uids[0] not in exclude:
+                    for acc in self.accounts:
+                        if acc.uid == bound_uids[0]:
+                            return acc
+                for acc in self.accounts:
+                    if acc.uid not in exclude:
+                        return acc
+                return None
+
+            def list_public(self):
+                return []
+
+            def apply_daily_token_limit(self, *a, **k):
+                return 0
+
+            def apply_daily_credit_limit(self, *a, **k):
+                return 0
+
+            def apply_model_daily_token_limit(self, *a, **k):
+                return 0
+
+            def apply_remaining_weights(self, weights=None):
+                return weights or {}
+
+        return Pool()
+
+    def _request(self, session_key=None):
+        def urlopen(req, timeout=30, proxy=""):
+            self.hits.append(req.full_url)
+            return _UpstreamResponse()
+
+        A.urlopen = urlopen
+        return wb_proxy.open_upstream(
+            {"model": "deepseek-v4.1-flash",
+             "messages": [{"role": "user", "content": "hi"}]},
+            session_key=session_key,
+            target_realm="intl")
+
+    def test_affinity_wait_acquires_when_slot_released(self):
+        wb_settings.set_account_max_concurrent(self.dir, 1)
+        wb_proxy.ACCOUNT_SLOT_WAIT_MAX = 0.5
+        session_key = "test-session"
+        wb_proxy.POOL.affinity.bind(session_key, "uid-a")
+
+        self.assertTrue(wb_proxy.account_slot_acquire(self.accounts[0]))
+
+        def release_slot():
+            time.sleep(0.1)
+            wb_proxy.account_slot_release(self.accounts[0])
+
+        t = threading.Thread(target=release_slot)
+        t.start()
+
+        try:
+            t0 = time.time()
+            response, account, _effort = self._request(session_key=session_key)
+            elapsed = time.time() - t0
+            self.assertGreaterEqual(elapsed, 0.08, "应当等待到释放才返回")
+            self.assertEqual(account.uid, "uid-a", "名额释放后应复用绑定的亲和账号")
+            self.assertEqual(len(self.hits), 1)
+            response.close()
+        finally:
+            t.join()
+        self.assertEqual(wb_proxy.account_inflight_snapshot(), {})
+
+    def test_affinity_wait_timeout_falls_back_to_other_account(self):
+        wb_settings.set_account_max_concurrent(self.dir, 1)
+        wb_proxy.ACCOUNT_SLOT_WAIT_MAX = 0.1
+        session_key = "test-session"
+        wb_proxy.POOL.affinity.bind(session_key, "uid-a")
+
+        self.assertTrue(wb_proxy.account_slot_acquire(self.accounts[0]))
+        try:
+            t0 = time.time()
+            response, account, _effort = self._request(session_key=session_key)
+            elapsed = time.time() - t0
+            self.assertGreaterEqual(elapsed, 0.08, "应当等待到超时才回退")
+            self.assertEqual(account.uid, "uid-b", "亲和账号等待超时后应回退到其他可用账号")
+            self.assertEqual(len(self.hits), 1)
+            response.close()
+        finally:
+            wb_proxy.account_slot_release(self.accounts[0])
+        self.assertEqual(wb_proxy.account_inflight_snapshot(), {})
 
 
 

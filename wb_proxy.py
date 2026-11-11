@@ -15017,6 +15017,12 @@ def open_upstream(payload, session_key=None, target_realm=None, prebuilt_body=No
         名额上限关闭时 account_slot_acquire 恒真且不记账，这里与改动前完全等价。
         """
         nonlocal busy
+        bound_uid = None
+        if session_key and POOL and hasattr(POOL, "affinity") and hasattr(POOL.affinity, "recent"):
+            recents = POOL.affinity.recent(session_key)
+            if recents and recents[0] not in tried and recents[0] not in busy:
+                bound_uid = recents[0]
+
         while True:
             exclude = tried | busy
             kwargs = dict(realm=realm, session_key=session_key,
@@ -15026,8 +15032,23 @@ def open_upstream(payload, session_key=None, target_realm=None, prebuilt_body=No
             candidate = POOL.pick_for_session(**kwargs) if POOL else None
             if candidate is None:
                 return None
-            if account_slot_acquire(candidate):
+
+            # 若候选账号是在飞名额已满的亲和账号（已有会话的前缀缓存暖号）：
+            # 短暂等待最多 ACCOUNT_SLOT_WAIT_MAX（2秒），若在等待期内名额释放，
+            # 则继续使用原亲和账号，牢牢保住会话前缀缓存！
+            if candidate.uid == bound_uid:
+                got = account_slot_acquire(candidate)
+                waited = 0.0
+                while not got and waited < ACCOUNT_SLOT_WAIT_MAX:
+                    time.sleep(0.05)
+                    waited += 0.05
+                    got = account_slot_acquire(candidate)
+                if got:
+                    return candidate
+                bound_uid = None
+            elif account_slot_acquire(candidate):
                 return candidate
+
             busy.add(candidate.uid)
             if len(busy) >= max(1, total):
                 # 池子里每个可用账号都满了：不再空转，交给上层排队/报错。
