@@ -389,6 +389,142 @@ class DshFileReferenceParagraphTests(unittest.TestCase):
             self.assertEqual(P.sanitize_text(text), text)
 
 
+class ClaudeCodeIntroFingerprintTests(unittest.TestCase):
+    """Claude Code 基础提示词首段（#733）。
+
+    报告者把提示词模式改成「替换」后 400 消失，确认指纹在 system 文本里。
+    旧规则把 ``Anthropic's official CLI for Claude`` 改写成 ``... CLI tool
+    for Claude``，反而把 ``You are Claude Code`` 保留下来；这里按 #743 处理
+    Codex 自述句的同一套办法整句中性化，并钉住 Anthropic 转换后的出站链路。
+    """
+
+    INTRO = "You are Claude Code, Anthropic's official CLI tool for Claude."
+    INTRO_NO_TOOL = "You are Claude Code, Anthropic's official CLI for Claude."
+    INTRO_CODE = "You are Claude Code, Anthropic\u2019s official CLI tool for Claude Code."
+    CLEAN = "You are a helpful AI assistant."
+
+    def test_intro_variants_neutralized(self):
+        for text in (self.INTRO, self.INTRO_NO_TOOL, self.INTRO_CODE,
+                     self.INTRO.lower(), self.INTRO.upper()):
+            self.assertTrue(P.has_fingerprint(text), text)
+            out = P.sanitize_text(text)
+            self.assertEqual(out, self.CLEAN, text)
+            self.assertFalse(P.has_fingerprint(out), text)
+
+    def test_embedded_in_system_prompt_preserves_surrounding_text(self):
+        text = "Before.\n" + self.INTRO + "\nAfter."
+        out = P.sanitize_text(text)
+        self.assertEqual(out, "Before.\n" + self.CLEAN + "\nAfter.")
+        self.assertFalse(P.has_fingerprint(out))
+
+    def test_idempotent(self):
+        once = P.sanitize_text(self.INTRO)
+        self.assertEqual(P.sanitize_text(once), once)
+
+    def test_scoped_to_system_developer_and_assistant(self):
+        out = P.sanitize_messages([
+            {"role": "system", "content": self.INTRO},
+            {"role": "developer", "content": self.INTRO},
+            {"role": "assistant", "content": self.INTRO},
+            {"role": "user", "content": self.INTRO},
+            {"role": "tool", "content": self.INTRO},
+        ])
+        for i in range(3):
+            self.assertEqual(out[i]["content"], self.CLEAN, out[i]["role"])
+        self.assertEqual(out[3]["content"], self.INTRO)
+        self.assertEqual(out[4]["content"], self.INTRO)
+
+    def test_other_claude_code_mentions_untouched(self):
+        for text in ("Claude Code is a CLI.", "Use Claude Code for this task."):
+            self.assertEqual(P.sanitize_text(text), text)
+
+    def test_anthropic_messages_path_carries_the_rewrite(self):
+        chat = P.messages_to_chat({
+            "model": "deepseek-v4.1-flash",
+            "system": [{"type": "text", "text": self.INTRO}],
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 128,
+        })
+        body = P.build_upstream_body(chat)
+        self.assertEqual(body["messages"][0]["content"], self.CLEAN)
+        self.assertEqual(body["messages"][1]["content"], "hi")
+
+
+class AnthropicHeaderFingerprintTests(unittest.TestCase):
+    """#733：消息正文里的 Anthropic 头键值与 cc_* 尾部参数。"""
+
+    def test_header_pair_removed(self):
+        self.assertEqual(
+            P.sanitize_text("x-anthropic-billing-hdr: 1.0.0"), "")
+        self.assertEqual(
+            P.sanitize_text("before x-anthropic-billing-hdr: 1.0.0; after"),
+            "before after")
+
+    def test_header_key_is_case_insensitive(self):
+        self.assertEqual(
+            P.sanitize_text("X-ANTHROPIC-BILLING-HDR: abc;"), "")
+
+    def test_cc_parameter_removed(self):
+        self.assertEqual(P.sanitize_text("cc_system_prompt=1;"), "")
+        self.assertEqual(
+            P.sanitize_text("prompt cc_temperature=0.7; tail"),
+            "prompt tail")
+
+    def test_bare_header_is_reduced(self):
+        out = P.sanitize_text("`x-anthropic-billing-hdr`")
+        self.assertEqual(out, "`anthropic-header`")
+        self.assertFalse(P.has_fingerprint(out))
+
+    # #853 / #854：Claude Code 2.1.37+ 把完整键名写进 system 首块。
+    # v2.0.7 只认缩写 `...-hdr`，完整键名被原样留在出站文本里，
+    # 上游把 `x-anthropic-billing-header` 当保留关键字，回 400 / 11128。
+    FULL_HEADER = (
+        "x-anthropic-billing-header: cc_version=2.1.321.abc; "
+        "cc_entrypoint=cli; cch=00000;")
+
+    def test_full_header_line_removed(self):
+        self.assertTrue(P.has_fingerprint(self.FULL_HEADER))
+        out = P.sanitize_text(self.FULL_HEADER)
+        self.assertEqual(out, "")
+        self.assertFalse(P.has_fingerprint(out))
+
+    def test_full_header_line_removed_before_prompt(self):
+        text = self.FULL_HEADER + "\nYou are a helpful AI assistant."
+        self.assertEqual(P.sanitize_text(text), "You are a helpful AI assistant.")
+
+    def test_full_header_line_is_case_insensitive(self):
+        text = self.FULL_HEADER.upper() + "\nKeep this."
+        self.assertEqual(P.sanitize_text(text), "Keep this.")
+
+    def test_full_header_bare_key_is_reduced(self):
+        out = P.sanitize_text("`x-anthropic-billing-header`")
+        self.assertEqual(out, "`anthropic-header`")
+        self.assertFalse(P.has_fingerprint(out))
+
+    def test_header_only_system_message_is_dropped(self):
+        out = P.sanitize_messages([
+            {"role": "system", "content": self.FULL_HEADER},
+            {"role": "user", "content": "hi"},
+        ])
+        self.assertEqual([m["role"] for m in out], ["user"])
+
+    def test_anthropic_messages_path_drops_full_header_block(self):
+        chat = P.messages_to_chat({
+            "model": "deepseek-v4.1-flash",
+            "system": [
+                {"type": "text", "text": self.FULL_HEADER},
+                {"type": "text", "text": "You are a helpful AI assistant."},
+            ],
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 128,
+        })
+        body = P.build_upstream_body(chat)
+        self.assertEqual(body["messages"][0]["content"],
+                         "You are a helpful AI assistant.")
+        self.assertNotIn("x-anthropic-billing-header",
+                         body["messages"][0]["content"])
+
+
 if __name__ == "__main__":
     unittest.main()
 

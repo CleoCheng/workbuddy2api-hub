@@ -88,6 +88,7 @@ import wb_modelsdev
 import wb_probes
 import wb_updates
 import wb_update_request
+import wb_usage_io
 import wb_slot_traffic
 IS_WINDOWS = os.name == "nt"
 
@@ -981,8 +982,7 @@ def _persist_usage(row, fail_label):
     """
     try:
         os.makedirs(USAGE_DIR, exist_ok=True)
-        with open(USAGE_LOG, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        wb_usage_io.append_line(USAGE_LOG, json.dumps(row, ensure_ascii=False), fail_label=fail_label)
     except Exception as exc:
         log("%s: %s" % (fail_label, exc))
 
@@ -11961,9 +11961,15 @@ def normalize_roles(messages):
 # ---------------------------------------------------------------------------
 # Fingerprint Sanitization (immunizes against Codex / Claude Code WAF patterns)
 # ---------------------------------------------------------------------------
-SANITIZE_FEATURES = (
+# Claude Code 2.1.37+ 会把计费归因头作为 system 的第一个文本块发出来（#853）：
+#   x-anthropic-billing-header: cc_version=...; cc_entrypoint=...; cch=...; ...
+# 上游把 `x-anthropic-billing-header` 当保留关键字，出现即 400 / 11128。
+# v2.0.7 只登记了缩写 `...-hdr`，完整键名漏网，于是 2.0.3 可用、2.0.7 被拦截（#854）。
+SANITIZE_BILLING_HDR_NAMES = (
     "x-anthropic-billing-header",
-    "cc_entrypoint=",
+    "x-anthropic-billing-hdr",
+)
+SANITIZE_FEATURES = SANITIZE_BILLING_HDR_NAMES + (
     "You are Claude Code",
     "Main branch (",
     "You are a coding agent running in the Codex CLI",
@@ -11971,8 +11977,6 @@ SANITIZE_FEATURES = (
     "11128",
 )
 SANITIZE_REWRITES = (
-    ("You are Claude Code, Anthropic's official CLI for Claude",
-     "You are Claude Code, Anthropic's official CLI tool for Claude"),
     ("Main branch (you will usually use this for PRs)",
      "Default branch (you will usually use this for PRs)"),
     ("You are a coding agent running in the Codex CLI, a terminal-based coding assistant.",
@@ -11981,8 +11985,23 @@ SANITIZE_REWRITES = (
      "To provide feedback, users should report the issue at https://github.com/anthropics/claude-code/issues"),
     ("11128", "11-128"),
 )
-SANITIZE_HDR_RE = re.compile(r"(?i)x-anthropic-billing-header:[^;\r\n]*;?\s*")
-SANITIZE_BARE_HDR_RE = re.compile(r"(?i)x-anthropic-billing-header")
+# Claude Code 的自述首段（#733）：报告者把提示词模式改成「替换」后 400 消失，
+# 说明指纹在 system 文本里。这里按 #743 处理 Codex 自述句的同一套办法整句
+# 中性化；只锚定这一句，其余 Claude Code 提示词原样保留。
+SANITIZE_CLAUDE_CODE_INTRO_RE = re.compile(
+    r"(?i)You are Claude Code,\s*Anthropic['’]s official CLI"
+    r"(?: tool)? for Claude(?: Code)?\.?")
+SANITIZE_CLAUDE_CODE_INTRO_REPLACEMENT = "You are a helpful AI assistant."
+SANITIZE_CLAUDE_CODE_LOWER = "you are claude code,"
+# 真实形态是一整行，尾部还有 `cch=` 这类不以前缀 `cc_` 开头的参数；按行删除，
+# 避免只删到第一个分号后把 `x-anthropic-billing-header:` 留在出站文本里。
+SANITIZE_HDR_LINE_RE = re.compile(
+    r"(?im)^[ \t]*x-anthropic-billing-(?:header|hdr)[ \t]*:[^\r\n]*(?:\r?\n|$)")
+# 行首之外的嵌入形态（旧客户端 / 日志回放）仍按「键 + 首个值」删除，
+# 后续 `cc_*` 参数由 SANITIZE_KV_RE 清理。
+SANITIZE_HDR_RE = re.compile(
+    r"(?i)x-anthropic-billing-(?:header|hdr)\s*:\s*[^;\r\n]*(?:;\s*)?")
+SANITIZE_BARE_HDR_RE = re.compile(r"(?i)x-anthropic-billing-(?:header|hdr)")
 SANITIZE_KV_RE = re.compile(r"(?i)\bcc_[a-z0-9_]+=[^;\r\n]*;?\s*")
 # WorkBuddy upstream returns 11128 ("Illegal API invocation from an unapproved
 # channel") when this exact OmO identity fingerprint appears as a contiguous
@@ -12074,31 +12093,33 @@ SANITIZE_BRAND_LOWER = "harness"
 # 归一化成基字母、再小写，副本上的 `in` 与 (?i) search 完全等价（多字符模式
 # 同样成立；全码点替换 + 定向用例 + 随机串对拍零差异，见 tests/_test_hotpath_savings.py）。
 SANITIZE_REI_FOLD = str.maketrans({0x130: "i", 0x131: "i", 0x17F: "s"})
-# 两个小写字面量直接从正则派生，保证与正则永远同源：手抄第二份迟早漂移，
-# 派生出来的值不存在这个问题。pattern 里的 (?i) 是内联旗标，剥掉后就是
-# 字面量本体。
-SANITIZE_BARE_HDR_LOWER = SANITIZE_BARE_HDR_RE.pattern
-if SANITIZE_BARE_HDR_LOWER.startswith("(?i)"):
-    SANITIZE_BARE_HDR_LOWER = SANITIZE_BARE_HDR_LOWER[4:]
+# 计费头有两个合法拼写（header / hdr），字面量快路径直接用登记表；
+# OMO 短语仍是单一字面量，继续从正则派生，保证与正则同源。
+SANITIZE_BARE_HDR_LOWER = SANITIZE_BILLING_HDR_NAMES[0]
 SANITIZE_OMO_JUNIOR_LOWER = SANITIZE_OMO_JUNIOR_RE.pattern.lower()
 SANITIZE_IDENTITY_LOWER = SANITIZE_IDENTITY_VERBS
 def has_fingerprint(text, identity=True):
     if not isinstance(text, str) or not text:
         return False
-    for f in SANITIZE_FEATURES:
-        if f in text:
-            return True
     # 三个特例字符几乎从不出现：先做三次 C 速度探测，命中才走归一化副本，
     # 常规文本只付一次 lower()。
     if "\u0130" in text or "\u0131" in text or "\u017f" in text:
         low = text.translate(SANITIZE_REI_FOLD).lower()
     else:
         low = text.lower()
+    for f in SANITIZE_FEATURES:
+        if f.lower() in low:
+            return True
     if (SANITIZE_BARE_HDR_LOWER in low
-            or SANITIZE_OMO_JUNIOR_LOWER in low):
+            or SANITIZE_OMO_JUNIOR_LOWER in low
+            or "cc_" in low):
         return True
     if not identity:
         return False
+    # SANITIZE_FEATURES 只登记了首字母大写的 "You are Claude Code"；这里用
+    # 小写字面量补齐大小写混排的 system 文本，命中后才走 sanitize_text 的正则。
+    if SANITIZE_CLAUDE_CODE_LOWER in low:
+        return True
     # 品牌词缩减：`harness` 是廉价前置筛，真命中交给正则。
     if (SANITIZE_BRAND_LOWER in low
             and SANITIZE_BRAND_RE.search(text) is not None):
@@ -12128,6 +12149,9 @@ def sanitize_text(text, identity=True):
     # neutralized.
     text = SANITIZE_OMO_JUNIOR_RE.sub("Sisyphus-Junior - Focused executor", text)
     if identity:
+        # Claude Code 自述首段先整句换掉：它本身就是 SANITIZE_FEATURES 里的指纹。
+        text = SANITIZE_CLAUDE_CODE_INTRO_RE.sub(
+            SANITIZE_CLAUDE_CODE_INTRO_REPLACEMENT, text)
         text = SANITIZE_IDENTITY_RE.sub(SANITIZE_IDENTITY_REPLACEMENT, text)
         # GUI 描述段单独一条规则：锚定整句，只调整句尾语序。
         text = SANITIZE_DSH_GUI_RE.sub(SANITIZE_DSH_GUI_REPLACEMENT, text)
@@ -12137,13 +12161,15 @@ def sanitize_text(text, identity=True):
         text = SANITIZE_BRAND_RE.sub(SANITIZE_BRAND_REPLACEMENT, text)
     for old, new in SANITIZE_REWRITES:
         text = text.replace(old, new)
+    # 计费归因头通常独占 system 首行；先整行删掉，`cch=` 等尾部参数不会残留。
+    text = SANITIZE_HDR_LINE_RE.sub("", text)
     text = SANITIZE_HDR_RE.sub("", text)
     if "cc_" in text:
         prev = ""
         while prev != text:
             prev = text
             text = SANITIZE_KV_RE.sub("", text)
-    text = SANITIZE_BARE_HDR_RE.sub("x-anthropic-billing-hdr", text)
+    text = SANITIZE_BARE_HDR_RE.sub("anthropic-header", text)
     return text.strip()
 def sanitize_content(content, identity=True):
     if isinstance(content, str):
@@ -12213,8 +12239,15 @@ def sanitize_messages(messages):
             # 仍是用户数据，不改写。
             identity = item.get("role") in ("system", "developer", "assistant")
             if "content" in item and not preserve_tool_result:
+                before = item.get("content")
                 item["content"] = sanitize_content(item["content"],
                                                    identity=identity)
+                # 整条 system 文本可能只有一个计费归因头；清洗后为空就直接
+                # 丢掉，避免把空 system 消息发给上游（空文本段会 400 / 11151）。
+                if (item.get("role") in ("system", "developer")
+                        and isinstance(before, str) and before.strip()
+                        and item["content"] == ""):
+                    continue
             if isinstance(item.get("reasoning_content"), str):
                 item["reasoning_content"] = sanitize_text(
                     item["reasoning_content"], identity=False)
@@ -12537,6 +12570,102 @@ def backfill_reasoning_content(messages, model, thinking_enabled=None):
         else:
             out.append(m)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Upstream reasoning mirror
+# ---------------------------------------------------------------------------
+def mirror_upstream_reasoning(messages, model):
+    """Mirror reasoning_content for models whose upstream reads reasoning."""
+    model_prefixes = (
+        "kimi", "glm", "minimax", "mimo", "step", "space-bunny",
+    )
+    if not str(model or "").lower().startswith(model_prefixes):
+        return messages
+    if not isinstance(messages, list):
+        return messages
+    out = []
+    for item in messages:
+        if isinstance(item, dict) and item.get("role") == "assistant":
+            rc = item.get("reasoning_content")
+            if rc and not item.get("reasoning"):
+                item = dict(item)
+                item["reasoning"] = rc
+        out.append(item)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Empty text parts (code 11151)
+# ---------------------------------------------------------------------------
+# 上游对每个 text 段做长度校验：`text` 为 "" 或缺失直接 400 / 11151
+# 「a message has empty content」，整段会话就此退役——每次重试都重放同一历史，
+# 换账号也救不回来。触发点不只是客户端真的发了 parts 数组：上游会把**字符串**
+# content 里以 `[` 开头的 JSON 数组当作 parts 解析，于是工具结果里常见的表单 /
+# 按钮抓取（`[{"type":"text","text":""}, ...]`）被当成一个空文本段。
+# 实测（kimi-k3.1-pro，cn 号池）：
+#   [{"type":"text","text":""}]            -> 400 / 11151
+#   [{"type":"text","text":null}]           -> 400 / 11151
+#   [{"type":"text"}]                       -> 400 / 11151
+#   [{"type":"text","text":"   "}]          -> 200（只看长度是否为零）
+#   [{"type":"textarea","text":""}]         -> 200（未识别的 type 被忽略）
+#   {"type":"text","text":""}（非数组）      -> 200（不嗅探对象）
+# 所以只补值、不删段：空 text 段填一个空格，语义不变（模型本来也看不到内容）。
+# 注意前缀空格挡不住嗅探——上游会先跳过空白再解析，别用那种写法。
+EMPTY_TEXT_PART_FILL = " "
+
+
+def _fill_empty_text_parts(parts):
+    """Give every empty text part a placeholder; True when one was filled."""
+    changed = False
+    for part in parts:
+        if not isinstance(part, dict) or part.get("type") != "text":
+            continue
+        text = part.get("text")
+        if text is None or text == "":
+            part["text"] = EMPTY_TEXT_PART_FILL
+            changed = True
+    return changed
+
+
+def _sniffed_parts(content):
+    """Return the parsed parts when a string body would be read as part list."""
+    if not isinstance(content, str):
+        return None
+    stripped = content.lstrip()
+    if not stripped.startswith("["):
+        return None
+    try:
+        parts = json.loads(stripped)
+    except Exception:
+        return None
+    if not parts or not isinstance(parts, list):
+        return None
+    if not all(isinstance(part, dict) for part in parts):
+        return None
+    return parts
+
+
+def guard_empty_text_parts(messages):
+    """Fill empty text parts, in real part lists and in sniffer-parsed strings."""
+    for m in messages or []:
+        if not isinstance(m, dict):
+            continue
+        content = m.get("content")
+        if isinstance(content, list):
+            # 只复制要改的 text 段；图片等其余段保持原引用，不改写调用方载荷。
+            parts = [dict(part) if isinstance(part, dict)
+                     and part.get("type") == "text" else part
+                     for part in content]
+            if _fill_empty_text_parts(parts):
+                m["content"] = parts
+        else:
+            parts = _sniffed_parts(content)
+            if parts is not None and _fill_empty_text_parts(parts):
+                m["content"] = json.dumps(parts, ensure_ascii=False)
+    return messages
+
+
 # ---------------------------------------------------------------------------
 # Tool & Tool Choice Normalization (avoids code 11101 on object tool_choice)
 # ---------------------------------------------------------------------------
@@ -13585,7 +13714,11 @@ def build_upstream_body(payload):
     repaired, _merged = merge_adjacent_tool_calls(body["messages"])
     repaired, _repacked = repack_tool_result_blocks(repaired)
     repaired, _cleaned = cleanup_orphan_tool_calls(repaired)
-    body["messages"] = repaired
+    # Last shape check: an empty text part is a hard 400 (11151) whichever side
+    # produced it, and it has to run after the merges above because they can
+    # move a string content into a different message.
+    body["messages"] = guard_empty_text_parts(repaired)
+    body["messages"] = mirror_upstream_reasoning(body["messages"], model)
     translate_max_completion_tokens(body)
     # Upstream GPT-family models enforce a minimum max_output_tokens >= 16;
     # smaller values (e.g. max_tokens=1 from probes) fail with 400 integer_below_min_value (#364, #252).
@@ -15363,6 +15496,14 @@ def open_upstream(payload, session_key=None, target_realm=None, prebuilt_body=No
                 # catalogue label; the tier map from `/v3/config` now drives
                 # both the scheduler and that label, so the request never gets
                 # this far for a gated model.
+                #
+                # `raise` skips the slot release after the loop, so hand the
+                # concurrency seat back first: without this the account stays
+                # "serving 1 request" forever and every later pick skips it
+                # (`account_max_concurrent=1` makes one leaked seat fatal).
+                if slot_held is not None:
+                    account_slot_release(slot_held)
+                    slot_held = None
                 raise
             if exc.code >= 500:
                 detail = http_error_detail(exc)
@@ -15403,6 +15544,12 @@ def open_upstream(payload, session_key=None, target_realm=None, prebuilt_body=No
                     POOL.affinity.demote(session_key, account.uid)
                 last_error = exc
                 continue
+            # Same leak as the 400 branch above: an unhandled status (e.g. 404
+            # from a wrong chat path) escapes the loop, so release the seat
+            # before unwinding.
+            if slot_held is not None:
+                account_slot_release(slot_held)
+                slot_held = None
             raise
         except Exception as exc:
             if wb_accounts.is_tls_verify_error(exc):
@@ -15783,12 +15930,24 @@ TEST_MODEL_DEFAULT = "deepseek-v4.1-flash"
 #: 一键测试的并发度：每个探针都是一次真实的上游请求，别把池子打成压测。
 PROBE_CONCURRENCY = 4
 
+#: Clash / sing-box / Surge 等本地 DNS 代理的 fake-IP 段（IANA benchmarking）。
+#: 开启 fake-IP 后，域名会先解析到这里，再由本机 TUN / 透明代理按 SNI 转发到真实
+#: 目标——198.18.0.11 本身不是要连的目的地，而是代理的占位地址。Python 的
+#: ipaddress 把 198.18.0.0/15 算作 is_private，不单独放行的话，开了 Clash Verge
+#: 的用户一键测试永远报「解析到非公网地址」，而真实请求其实一切正常。
+FAKE_IP_NETWORK = ipaddress.ip_network("198.18.0.0/15")
+
 def _is_public_addr(text):
-    """是不是一个可以直连的公网地址（拒绝环回/私有/链路本地/保留段）。"""
+    """是不是一个可以直连的公网地址（拒绝环回/私有/链路本地/保留段）。
+
+    fake-IP 段例外：它只存在于本地 DNS 代理里，连接由代理按域名转发。
+    """
     try:
         addr = ipaddress.ip_address(str(text).split("%")[0])
     except ValueError:
         return False
+    if addr.version == 4 and addr in FAKE_IP_NETWORK:
+        return True
     return not (addr.is_private or addr.is_loopback or addr.is_link_local
                 or addr.is_reserved or addr.is_multicast or addr.is_unspecified)
 
