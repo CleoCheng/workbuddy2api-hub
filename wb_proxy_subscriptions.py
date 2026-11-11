@@ -4,6 +4,7 @@ WB_MIHOMO_CONFIG must point to an operator-provisioned JSON-form Mihomo config
 (JSON is valid YAML). Arbitrary YAML is never parsed or rewritten heuristically.
 The gateway only edits HTTP providers and use-lists of its mapped selectors.
 """
+import base64
 import copy
 import hashlib
 import ipaddress
@@ -13,8 +14,50 @@ import re
 import stat
 import subprocess
 import time
+import urllib.error
 import urllib.parse
+import urllib.request
 from pathlib import Path
+
+try:
+    yaml = __import__("yaml")
+except Exception:  # pragma: no cover - PyYAML is available on supported hosts
+    yaml = None
+
+SUBS_DIR = os.environ.get('WB_SUBS_DIR', '')
+SUBS_BASE = os.environ.get('WB_SUBS_BASE', '').rstrip('/')
+FETCH_TIMEOUT = int(os.environ.get('WB_SUBS_FETCH_TIMEOUT') or 25)
+FETCH_PROXY = os.environ.get('WB_SUBS_FETCH_PROXY', '')
+FETCH_PORTS = os.environ.get('WB_SUBS_FETCH_PORTS', '17901-17910')
+MAX_BYTES = 10 * 1024 * 1024
+
+_FAKE_NODE_RE = re.compile(
+    r"(?:"
+    r"expire|expiration|remaining|traffic|reset|notice|announcement|website|official|subscribe|"
+    r"到期|剩余|流量|重置|通知|公告|提示|官网|网址|群组|频道|防失联|客服|续费|购买|套餐|说明|提醒"
+    r")",
+    re.IGNORECASE
+)
+
+
+def is_fake_node(name_or_node):
+    """Identify informational, billing, or fake dummy nodes in subscriptions.
+    
+    Examples: '[flower] Expire: 2027-04-09', '剩余流量: 100G', '官网: xxx'.
+    """
+    if not name_or_node:
+        return True
+    if isinstance(name_or_node, dict):
+        name = str(name_or_node.get("name") or "")
+        server = str(name_or_node.get("server") or "").lower()
+        if server in ("127.0.0.1", "0.0.0.0", "localhost"):
+            return True
+    else:
+        name = str(name_or_node)
+    name = name.strip()
+    if not name:
+        return True
+    return bool(_FAKE_NODE_RE.search(name))
 
 
 def _load():
@@ -55,6 +98,228 @@ def _url(value):
     return value
 
 
+def _proxy_candidates():
+    if FETCH_PROXY:
+        return [FETCH_PROXY]
+    out = []
+    for part in FETCH_PORTS.split(','):
+        part = part.strip()
+        if '-' in part:
+            try:
+                start, end = part.split('-', 1)
+                out.extend('http://127.0.0.1:%d' % port for port in range(int(start), int(end) + 1))
+            except ValueError:
+                continue
+        elif part.isdigit():
+            out.append('http://127.0.0.1:' + part)
+    return out
+
+
+def _http_get(url, proxy=None, timeout=None):
+    handler = urllib.request.ProxyHandler({'http': proxy, 'https': proxy} if proxy else {})
+    opener = urllib.request.build_opener(handler)
+    request = urllib.request.Request(url, headers={'User-Agent': 'clash.meta', 'Accept': '*/*'})
+    try:
+        with opener.open(request, timeout=timeout or FETCH_TIMEOUT) as response:
+            return response.status, response.read(MAX_BYTES + 1)
+    except urllib.error.HTTPError as exc:
+        try:
+            body = exc.read(MAX_BYTES) or b''
+        except Exception:
+            body = b''
+        return exc.code, body
+    except Exception:
+        return 0, b''
+
+
+def _fetch_subscription(url):
+    status, body = _http_get(url)
+    if status == 200 and len(body) > 1:
+        return body
+    for proxy in _proxy_candidates():
+        try:
+            code, payload = _http_get(url, proxy=proxy, timeout=min(FETCH_TIMEOUT, 10))
+        except Exception:
+            continue
+        if code == 200 and len(payload) > 1:
+            return payload
+    if status == 403:
+        raise ValueError('subscription_source_blocked') from None
+    if status == 404:
+        raise ValueError('subscription_source_not_found') from None
+    if status:
+        raise ValueError('subscription_source_http_error') from None
+    raise ValueError('subscription_source_unreachable') from None
+
+
+def _ss_node(line):
+    parts = urllib.parse.urlsplit(line)
+    name = urllib.parse.unquote(parts.fragment) or (parts.hostname or 'ss')
+    if parts.hostname and parts.port:
+        userinfo = urllib.parse.unquote(parts.username or '')
+        if ':' in userinfo:
+            cipher, password = userinfo.split(':', 1)
+            return dict(name=name, type='ss', server=parts.hostname, port=parts.port,
+                        cipher=cipher, password=password, udp=True)
+        try:
+            decoded_user = base64.urlsafe_b64decode(
+                userinfo + '=' * (-len(userinfo) % 4)).decode('utf-8')
+        except Exception:
+            decoded_user = ''
+        if ':' in decoded_user:
+            cipher, password = decoded_user.split(':', 1)
+            return dict(name=name, type='ss', server=parts.hostname, port=parts.port,
+                        cipher=cipher, password=password, udp=True)
+    raw = line.split('://', 1)[1].split('#', 1)[0]
+    try:
+        decoded = base64.urlsafe_b64decode(raw + '=' * (-len(raw) % 4)).decode('utf-8')
+    except Exception:
+        return None
+    if '@' not in decoded or ':' not in decoded:
+        return None
+    userinfo, hostport = decoded.rsplit('@', 1)
+    cipher, password = userinfo.split(':', 1)
+    host, port = hostport.rsplit(':', 1)
+    return dict(name=name, type='ss', server=host, port=int(port), cipher=cipher,
+                password=password, udp=True)
+
+
+def _trojan_node(line):
+    parts = urllib.parse.urlsplit(line)
+    if not parts.hostname:
+        return None
+    query = urllib.parse.parse_qs(parts.query)
+    node = dict(name=urllib.parse.unquote(parts.fragment) or parts.hostname, type='trojan',
+                server=parts.hostname, port=parts.port or 443,
+                password=urllib.parse.unquote(parts.username or ''), udp=True)
+    if query.get('sni'):
+        node['sni'] = query['sni'][0]
+    if (query.get('allowInsecure') or query.get('insecure') or ['0'])[0].lower() in ('1', 'true'):
+        node['skip-cert-verify'] = True
+    return node
+
+
+def _parse_uri_list(text):
+    body = text.strip()
+    if '://' not in body:
+        try:
+            body = base64.b64decode(''.join(body.split()), validate=True).decode('utf-8')
+        except Exception:
+            return None
+    out = []
+    for line in body.splitlines():
+        line = line.strip()
+        if '://' not in line:
+            continue
+        scheme = line.split('://', 1)[0].lower()
+        try:
+            if scheme == 'ss':
+                node = _ss_node(line)
+            elif scheme == 'trojan':
+                node = _trojan_node(line)
+            else:
+                node = None
+        except Exception:
+            node = None
+        if node and not is_fake_node(node):
+            out.append(node)
+    return out or None
+
+
+def _parse_subscription(body):
+    if len(body) > MAX_BYTES:
+        raise ValueError('subscription_too_large') from None
+    text = None
+    for encoding in ('utf-8-sig', 'utf-8'):
+        try:
+            text = body.decode(encoding)
+            break
+        except Exception:
+            continue
+    if not text or not text.strip():
+        raise ValueError('subscription_empty') from None
+    proxies = None
+    if yaml is not None:
+        try:
+            doc = yaml.safe_load(text)
+        except Exception:
+            doc = None
+        if isinstance(doc, dict) and isinstance(doc.get('proxies'), list):
+            proxies = doc['proxies']
+        elif isinstance(doc, list):
+            proxies = doc
+    if proxies is None:
+        proxies = _parse_uri_list(text)
+    if not proxies:
+        raise ValueError('subscription_format_unsupported') from None
+    clean = []
+    for node in proxies:
+        if not isinstance(node, dict):
+            continue
+        if not node.get('name') or not node.get('type') or not node.get('server') or not node.get('port'):
+            continue
+        if is_fake_node(node):
+            continue
+        clean.append(node)
+    if not clean:
+        raise ValueError('subscription_format_unsupported') from None
+    return clean
+
+
+def _publish(name, proxies):
+    if not (SUBS_DIR and SUBS_BASE and yaml is not None):
+        return None
+    try:
+        os.makedirs(SUBS_DIR, mode=0o755, exist_ok=True)
+        target = os.path.join(SUBS_DIR, name + '.yaml')
+        pending = target + '.tmp'
+        with open(pending, 'w', encoding='utf-8', newline='\n') as handle:
+            yaml.safe_dump({'proxies': proxies}, handle, allow_unicode=True, sort_keys=False)
+        os.chmod(pending, 0o644)
+        os.replace(pending, target)
+    except OSError:
+        raise ValueError('subscription_publish_failed') from None
+    return SUBS_BASE + '/' + urllib.parse.quote(name, safe='') + '.yaml'
+
+
+def _sources_path(mon):
+    return mon.root / 'subscription-sources.json'
+
+
+def _load_sources(mon):
+    try:
+        data = json.loads(_sources_path(mon).read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _save_sources(mon, data):
+    path = _sources_path(mon)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        pending = path.with_name(path.name + '.tmp')
+        pending.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+        os.chmod(str(pending), 0o600)
+        os.replace(str(pending), str(path))
+    except OSError:
+        pass
+
+
+def _wait_provider(mon, cfg, name, timeout=15.0):
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            live = mon._api(cfg, '/providers/proxies')['providers']
+            if (live.get(name) or {}).get('proxies'):
+                return True
+        except Exception:
+            pass
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.5)
+
+
 def _groups(mon):
     return set(mon.cfg['groups'].values()) | {mon.cfg['probe_group']}
 
@@ -79,6 +344,7 @@ def view(mon):
     except ValueError as exc:
         return dict(available=False, error=str(exc), providers=[])
     groups = _groups(mon)
+    sources = _load_sources(mon)
     active = {n for g in data.get('proxy-groups', []) if g.get('name') in groups for n in g.get('use', [])}
     try:
         live = mon._api(mon.cfg, '/providers/proxies')['providers']
@@ -100,7 +366,13 @@ def view(mon):
                 break
         if not tag:
             tag = extract_group_tag(name)
-        rows.append(dict(name=name, tag=tag, source='https://' + host + '/••••',
+        meta = sources.get(name) or {}
+        origin = meta.get('source') or provider.get('url', '')
+        origin_host = urllib.parse.urlsplit(str(origin)).hostname or host
+        source = 'https://' + origin_host + '/••••'
+        if meta.get('published'):
+            source += '（本地托管）'
+        rows.append(dict(name=name, tag=tag, source=source,
                          enabled=name in active, interval=provider.get('interval', 3600),
                          nodes=len(proxies), updated_at=status.get('updatedAt', ''),
                          connected=bool(proxies)))
@@ -180,13 +452,28 @@ def change(mon, payload, refresh=False):
             if not existing or existing.get('type') != 'http':
                 raise ValueError('http_subscription_required')
             try:
+                sources = _load_sources(mon)
+                meta = dict(sources.get(name) or {})
+                if meta.get('source'):
+                    body = _fetch_subscription(meta['source'])
+                    proxies = _parse_subscription(body)
+                    published = _publish(name, proxies)
+                    meta['published'] = published or meta.get('published') or ''
+                    meta['at'] = int(time.time())
+                    sources[name] = meta
+                    _save_sources(mon, sources)
                 selected = {g: v.get('now') for g, v in mon._api(cfg, '/proxies')['proxies'].items()
                             if v.get('type') == 'Selector'}
                 mon._api(dict(cfg, timeout=60), '/providers/proxies/' + urllib.parse.quote(name, safe=''), {})
+                _wait_provider(mon, cfg, name, timeout=8)
                 with mon.lock:
                     rows = copy.deepcopy(mon.rows)
                 _restore_selectors(mon, cfg, selected, rows)
                 mon._publish(rows)
+            except ValueError as exc:
+                if str(exc).startswith('subscription_'):
+                    raise
+                raise ValueError('subscription_refresh_failed') from None
             except Exception:
                 raise ValueError('subscription_refresh_failed') from None
             mon.trigger(rescan=True)
@@ -201,16 +488,30 @@ def change(mon, payload, refresh=False):
         url = _url(raw_url) if raw_url else (existing or {}).get('url')
         if not url:
             raise ValueError('public_https_subscription_required')
+        sources = _load_sources(mon)
+        meta = dict(sources.get(name) or {})
+        if raw_url:
+            body = _fetch_subscription(url)
+            proxies = _parse_subscription(body)
+            published = _publish(name, proxies)
+            meta.update(source=url, published=published or '', at=int(time.time()),
+                        nodes=len(proxies))
+            target_url = published or url
+        else:
+            target_url = meta.get('published') or url
+            meta.update(source=meta.get('source') or url, at=int(time.time()))
         data = copy.deepcopy(old)
         entry = data['proxy-providers'].setdefault(name, dict(type='http',
             **{'proxy': 'DIRECT', 'size-limit': 10 * 1024 * 1024,
                'header': {'User-Agent': ['clash.meta']},
                'health-check': dict(enable=True, url='https://www.gstatic.com/generate_204', interval=300),
                'override': {'additional-prefix': '[' + name + '] '}}))
-        entry.update(url=url, interval=interval)
-        if not existing or url != existing.get('url'):
-            key = hashlib.sha256((name + '\n' + url).encode()).hexdigest()[:24]
+        entry.update(url=target_url, interval=interval)
+        if not existing or target_url != existing.get('url'):
+            key = hashlib.sha256((name + '\n' + target_url).encode()).hexdigest()[:24]
             entry['path'] = './providers/gateway-' + key + '.yaml'
+        sources[name] = meta
+        _save_sources(mon, sources)
         managed = _groups(mon)
         found = set()
         for group in data.get('proxy-groups', []):
@@ -252,8 +553,7 @@ def change(mon, payload, refresh=False):
         try:
             _write(path, data, attributes)
             mon._api(dict(cfg, timeout=60), '/configs?force=true', {'payload': json.dumps(data, ensure_ascii=False)})
-            live_providers = mon._api(cfg, '/providers/proxies')['providers']
-            if not live_providers.get(name, {}).get('proxies'):
+            if not _wait_provider(mon, cfg, name):
                 raise ValueError('subscription_empty_or_fetch_failed')
             rows = copy.deepcopy(old_rows)
             _restore_selectors(mon, cfg, selected, rows)

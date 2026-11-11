@@ -2053,6 +2053,11 @@ def apply_daily_credit_limit(refresh=False):
     into the pool."""
     if POOL is None:
         return 0
+    if hasattr(POOL, "apply_free_models"):
+        try:
+            POOL.apply_free_models(free_models_by_realm())
+        except Exception:
+            pass
     limits = wb_settings.limit_values(ACCOUNTS_DIR, "daily_credit_limit")
     credits = None
     free_models = None
@@ -2072,6 +2077,11 @@ def apply_reserve_credits(refresh=False):
     """
     if POOL is None:
         return 0
+    if hasattr(POOL, "apply_free_models"):
+        try:
+            POOL.apply_free_models(free_models_by_realm())
+        except Exception:
+            pass
     values = wb_settings.limit_values(ACCOUNTS_DIR, "reserve_credits")
     on = any(value > 0 for value in values.values())
     if not on and not refresh:
@@ -10345,6 +10355,7 @@ def runtime_settings_view():
         "ui_language": wb_settings.ui_language(ACCOUNTS_DIR),
         "pricing_variant_inherit": wb_settings.pricing_variant_inherit(ACCOUNTS_DIR),
         "pricing_enabled": wb_settings.pricing_enabled(ACCOUNTS_DIR),
+        "rolling_rest": wb_settings.rolling_rest_config(ACCOUNTS_DIR),
         "auto_switch_product": wb_settings.auto_switch_product(ACCOUNTS_DIR),
         "auto_switch_products": wb_settings.auto_switch_products(ACCOUNTS_DIR),
         "free_model_credit_fallback": wb_settings.free_model_credit_fallback(ACCOUNTS_DIR),
@@ -15252,6 +15263,8 @@ def open_upstream(payload, session_key=None, target_realm=None, prebuilt_body=No
                     account.note_restricted(detail=detail,
                                             cooldown=RESTRICTED_403_COOLDOWN)
                     _persist_restriction(account)
+                    if account.proxy:
+                        wb_accounts.proxy_health_risk_control(account.proxy, reason="11140")
                     log("account %s restricted by upstream (403 11140), "
                         "cooling %.0fs (persisted)" % (account.uid[:8],
                                                        RESTRICTED_403_COOLDOWN))
@@ -15878,6 +15891,8 @@ def probe_account(account, model=None, timeout=30):
             # 一并记连坐事件：一键测试正好是发现「整池被清扫」的入口。
             account.note_restricted(detail=detail)
             _persist_restriction(account)
+            if account.proxy:
+                wb_accounts.proxy_health_risk_control(account.proxy, reason="11140")
             note_account_restriction(account.realm, account.uid)
             row["restricted"] = True
             row["fails"] = int(account.fails)
@@ -20573,6 +20588,21 @@ class Handler(BaseHTTPRequestHandler):
                 return self._error(400, "free_model_credit_fallback must be true or false", "invalid_request_error")
             wb_settings.set_free_model_credit_fallback(ACCOUNTS_DIR, raw)
             reply["free_model_credit_fallback"] = raw
+        if "rolling_rest" in payload:
+            raw = payload.get("rolling_rest")
+            if isinstance(raw, dict):
+                try:
+                    cfg = wb_settings.set_rolling_rest_config(
+                        ACCOUNTS_DIR,
+                        enabled=raw.get("enabled"),
+                        minutes=raw.get("minutes"),
+                        count=raw.get("count"),
+                    )
+                    reply["rolling_rest"] = cfg
+                    if POOL is not None:
+                        POOL.update_rolling_rest(ACCOUNTS_DIR)
+                except ValueError as exc:
+                    return self._error(400, str(exc), "invalid_request_error")
         if "auto_switch_product" in payload:
             # Strictly a JSON boolean: a string like "false" would be truthy and
             # silently switch the feature on, which is the one thing an operator

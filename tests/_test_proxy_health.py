@@ -559,6 +559,12 @@ class SubscriptionTests(unittest.TestCase):
         self.env.start();self.addCleanup(self.env.stop)
         self.validate = mock.patch.object(P, '_validate_native')
         self.validate.start();self.addCleanup(self.validate.stop)
+        self.fetch = mock.patch.object(P, '_fetch_subscription',
+            return_value=b'proxies:\n  - {name: c-node, type: ss, server: 1.2.3.4, port: 443, cipher: aes-128-gcm, password: x}\n')
+        self.fetch.start();self.addCleanup(self.fetch.stop)
+        self.real_publish = P._publish
+        self.publish = mock.patch.object(P, '_publish', return_value=None)
+        self.publish.start();self.addCleanup(self.publish.stop)
         hub = types.SimpleNamespace(ACCOUNTS_DIR=str(Path(self.tmp.name)/'accounts'),log=lambda s:None)
         self.mon = H.Monitor(hub);self.addCleanup(self.mon.stop)
         self.mon.cfg.update(groups={'slot-1':'g1','slot-2':'g2'})
@@ -593,6 +599,29 @@ class SubscriptionTests(unittest.TestCase):
             self.assertNotIn(secret, text)
         self.assertIn('one.example', text)
         self.assertEqual(len(P.view(self.mon)['providers']), 2)
+
+    def test_http_get_handles_unreachable_without_raising(self):
+        code, body = P._http_get('http://127.0.0.1:1/none', timeout=1)
+        self.assertEqual(code, 0)
+        self.assertEqual(body, b'')
+
+    def test_parse_and_publish_supports_uri_subscription(self):
+        import base64 as _b64
+        import os as _os
+        import yaml as _yaml
+        uri = 'ss://' + _b64.urlsafe_b64encode(b'aes-128-gcm:pass').decode().rstrip('=') + '@1.2.3.4:8388#node1'
+        body = _b64.b64encode(uri.encode()).decode().encode()
+        nodes = P._parse_subscription(body)
+        self.assertEqual(len(nodes), 1)
+        self.assertEqual(nodes[0]['type'], 'ss')
+        self.assertEqual(nodes[0]['server'], '1.2.3.4')
+        with tempfile.TemporaryDirectory() as folder:
+            with mock.patch.object(P, 'SUBS_DIR', folder), mock.patch.object(P, 'SUBS_BASE', 'https://subs.example'):
+                url = self.real_publish('demo', nodes)
+            self.assertEqual(url, 'https://subs.example/demo.yaml')
+            with open(_os.path.join(folder, 'demo.yaml'), encoding='utf-8') as handle:
+                saved = _yaml.safe_load(handle)
+            self.assertEqual(len(saved['proxies']), 1)
 
     def test_new_subscription_joins_all_existing_groups_without_listener_changes(self):
         P.change(self.mon, dict(name='c',url='https://three.example/sub?token=new-private',enabled=True,interval=1800))

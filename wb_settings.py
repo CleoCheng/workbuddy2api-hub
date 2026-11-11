@@ -145,6 +145,74 @@ ACCOUNT_MAX_CONCURRENT_KEY = "account_max_concurrent"
 #: 上限值域：0 = 不限；1..10 是「每账号同时几个」。10 只是防手滑的上界。
 ACCOUNT_MAX_CONCURRENT_MAX = 10
 
+# 账号轮休机制：周期性休眠账号以降低单一账号频控风险
+ROLLING_REST_ENABLED_KEY = "rolling_rest_enabled"
+ROLLING_REST_MINUTES_KEY = "rolling_rest_minutes"
+ROLLING_REST_COUNT_KEY = "rolling_rest_count"
+DEFAULT_ROLLING_REST_ENABLED = True
+DEFAULT_ROLLING_REST_MINUTES = 60
+DEFAULT_ROLLING_REST_COUNT = 3
+MIN_ROLLING_REST_MINUTES = 5
+MAX_ROLLING_REST_MINUTES = 1440
+MIN_ROLLING_REST_COUNT = 1
+MAX_ROLLING_REST_COUNT = 20
+
+
+def rolling_rest_config(accounts_dir):
+    """Configuration for automatic rolling rest of accounts."""
+    data = load(accounts_dir)
+    enabled = data.get(ROLLING_REST_ENABLED_KEY)
+    if not isinstance(enabled, bool):
+        enabled = DEFAULT_ROLLING_REST_ENABLED
+    minutes = data.get(ROLLING_REST_MINUTES_KEY)
+    if isinstance(minutes, bool) or not isinstance(minutes, int) or not (MIN_ROLLING_REST_MINUTES <= minutes <= MAX_ROLLING_REST_MINUTES):
+        minutes = DEFAULT_ROLLING_REST_MINUTES
+    count = data.get(ROLLING_REST_COUNT_KEY)
+    if isinstance(count, bool) or not isinstance(count, int) or not (MIN_ROLLING_REST_COUNT <= count <= MAX_ROLLING_REST_COUNT):
+        count = DEFAULT_ROLLING_REST_COUNT
+    return {"enabled": enabled, "minutes": minutes, "count": count}
+
+
+def set_rolling_rest_config(accounts_dir, enabled=None, minutes=None, count=None):
+    """Persist the rolling rest configuration. Thread-safe."""
+    if enabled is not None:
+        if not isinstance(enabled, bool):
+            raise ValueError("rolling_rest enabled must be true or false")
+    if minutes is not None:
+        if isinstance(minutes, bool):
+            raise ValueError("rolling_rest minutes must be an integer")
+        if not isinstance(minutes, int):
+            try:
+                minutes = int(minutes)
+            except (ValueError, TypeError):
+                raise ValueError("rolling_rest minutes must be an integer between %d and %d"
+                                 % (MIN_ROLLING_REST_MINUTES, MAX_ROLLING_REST_MINUTES))
+        if not (MIN_ROLLING_REST_MINUTES <= minutes <= MAX_ROLLING_REST_MINUTES):
+            raise ValueError("rolling_rest minutes must be between %d and %d"
+                             % (MIN_ROLLING_REST_MINUTES, MAX_ROLLING_REST_MINUTES))
+    if count is not None:
+        if isinstance(count, bool):
+            raise ValueError("rolling_rest count must be an integer")
+        if not isinstance(count, int):
+            try:
+                count = int(count)
+            except (ValueError, TypeError):
+                raise ValueError("rolling_rest count must be an integer between %d and %d"
+                                 % (MIN_ROLLING_REST_COUNT, MAX_ROLLING_REST_COUNT))
+        if not (MIN_ROLLING_REST_COUNT <= count <= MAX_ROLLING_REST_COUNT):
+            raise ValueError("rolling_rest count must be between %d and %d"
+                             % (MIN_ROLLING_REST_COUNT, MAX_ROLLING_REST_COUNT))
+    with _lock:
+        data = load(accounts_dir)
+        if enabled is not None:
+            data[ROLLING_REST_ENABLED_KEY] = enabled
+        if minutes is not None:
+            data[ROLLING_REST_MINUTES_KEY] = minutes
+        if count is not None:
+            data[ROLLING_REST_COUNT_KEY] = count
+        save(accounts_dir, data)
+    return rolling_rest_config(accounts_dir)
+
 
 def account_max_concurrent(accounts_dir):
     """How many chat requests one upstream account may run at once.

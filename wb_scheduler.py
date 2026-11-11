@@ -122,6 +122,7 @@ class Scheduler:
         self._thread = None
         self._probe_thread = None
         self._scan_thread = None
+        self._restriction_probe_thread = None
         self.last_run_time = None
         self.next_run_time = None
         self.logs = []
@@ -212,7 +213,69 @@ class Scheduler:
             # 模型额度定时主动查询：同样不受 enabled 影响——它是「哪些配额线
             # 已经打满」的唯一主动信息源，跟签到/保活不是一回事。
             self._run_quota_scans()
+            # 账号轮休动态维护
+            try:
+                if hasattr(self.pool, "update_rolling_rest"):
+                    self.pool.update_rolling_rest(getattr(self.pool, "dir", ""))
+            except Exception as exc:
+                self.log(f"轮休维护异常: {exc}")
+            # 受限账号轻量主动复测
+            self._run_restriction_probes()
             self._stop_event.wait(self._next_wait())
+
+    def _run_restriction_probes(self):
+        """在独立工作线程中执行受限账号轻量复测探测。"""
+        if getattr(self, "_restriction_probe_thread", None) and self._restriction_probe_thread.is_alive():
+            return
+        self._restriction_probe_thread = threading.Thread(
+            target=self._restriction_probe_worker, daemon=True
+        )
+        self._restriction_probe_thread.start()
+
+    def _restriction_probe_worker(self):
+        try:
+            now = time.time()
+            candidates = []
+            for acc in getattr(self.pool, "accounts", []):
+                if acc.restricted_until > 0 and now >= acc.restricted_until:
+                    candidates.append(acc)
+            for acc in candidates:
+                if self._stop_event.is_set():
+                    break
+                acc.probing = True
+                self.log(f"开始复测受限账号: {acc.uid[:8]}")
+                try:
+                    if getattr(acc, "is_api_key", False):
+                        ok = bool(acc.fetch_credits())
+                    else:
+                        ok = acc.refresh()
+                    if ok:
+                        acc.note_restriction_probe_result(True)
+                        acc.save(getattr(self.pool, "dir", ""))
+                        self.log(f"受限账号 {acc.uid[:8]} 复测成功，已恢复入池")
+                    else:
+                        detail = getattr(acc, "last_error_detail", "") or getattr(acc, "last_error", "")
+                        acc.note_restriction_probe_result(False, detail)
+                        acc.save(getattr(self.pool, "dir", ""))
+                        self.log(f"受限账号 {acc.uid[:8]} 复测未通过，退避至 {int(acc.restricted_until)}")
+                except urllib.error.HTTPError as exc:
+                    detail = ""
+                    try:
+                        detail = exc.read().decode("utf-8", errors="ignore")
+                    except Exception:
+                        pass
+                    if exc.code == 403 and ("11140" in detail or "restricted" in detail.lower()):
+                        acc.note_restriction_probe_result(False, detail)
+                        acc.save(getattr(self.pool, "dir", ""))
+                        self.log(f"受限账号 {acc.uid[:8]} 复测仍受限 (11140)，退避至 {int(acc.restricted_until)}")
+                    else:
+                        acc.probing = False
+                        self.log(f"受限账号 {acc.uid[:8]} 复测网络异常 (HTTP {exc.code}): {exc}")
+                except Exception as exc:
+                    acc.probing = False
+                    self.log(f"受限账号 {acc.uid[:8]} 复测异常: {exc}")
+        except Exception as exc:
+            self.log(f"受限探针工作线程异常: {exc}")
 
     def _run_window_probes(self):
         """在独立线程里执行到点的窗口探针。

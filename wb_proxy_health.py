@@ -37,6 +37,34 @@ CHECK_URLS = ('https://api.ipify.org', 'https://checkip.amazonaws.com')
 _managers = {}
 _lock = threading.Lock()
 
+_FAKE_NODE_RE = re.compile(
+    r"(?:"
+    r"expire|expiration|remaining|traffic|reset|notice|announcement|website|official|subscribe|"
+    r"到期|剩余|流量|重置|通知|公告|提示|官网|网址|群组|频道|防失联|客服|续费|购买|套餐|说明|提醒"
+    r")",
+    re.IGNORECASE
+)
+
+
+def is_fake_node(name_or_node):
+    """Identify informational, billing, or fake dummy nodes in subscriptions.
+    
+    Examples: '[flower] Expire: 2027-04-09', '剩余流量: 100G', '官网: xxx'.
+    """
+    if not name_or_node:
+        return True
+    if isinstance(name_or_node, dict):
+        name = str(name_or_node.get("name") or "")
+        server = str(name_or_node.get("server") or "").lower()
+        if server in ("127.0.0.1", "0.0.0.0", "localhost"):
+            return True
+    else:
+        name = str(name_or_node)
+    name = name.strip()
+    if not name:
+        return True
+    return bool(_FAKE_NODE_RE.search(name))
+
 
 def extract_group_tag(name_or_node):
     """Extract subscription group tag/code, e.g. '[B]' from '[B] 香港 01' or 'subscription-b'."""
@@ -228,6 +256,16 @@ class WorkerSignals:
         except OSError:
             pass
 
+    def report_risk_control(self, proxy, reason="11140"):
+        if not proxy:
+            return
+        key = hashlib.sha256(proxy.encode()).hexdigest()
+        try:
+            atomic_json(self.root / 'events' / (key + '_risk.json'),
+                        dict(proxy=proxy, reason=reason, at=time.time()))
+        except OSError:
+            pass
+
 
 class ObservedResponse:
     """Preserve urllib response semantics while reporting read/stream failures."""
@@ -286,11 +324,13 @@ class Monitor:
         self.last_round = 0
         self.error = ''
         self.ranking = {}
+        self.quarantined_exits = {}
         self.cfg = config(hub.ACCOUNTS_DIR)
         try:
             old = json.loads((self.root / 'state.json').read_text(encoding='utf-8'))
             self.rows = old.get('slots', {})
             self.history = old.get('history', [])[-100:]
+            self.quarantined_exits = old.get('quarantined_exits', {})
             # Scan again after restart; persisted results remain visible meanwhile.
             self.ranking = dict(old.get('ranking', {}), completed_at=0, scanning=False)
         except (OSError, ValueError):
@@ -412,6 +452,8 @@ class Monitor:
             node_name = result['node']
             if node_name not in group.get('all', []) or node_name == current or node_name == 'REJECT':
                 continue
+            if is_fake_node(node_name):
+                continue
             seen.add(node_name)
             reason = ('exit_occupied' if (result.get('ip') and result['ip'] in occupied) or node_name in used else
                       'country_restricted' if not cfg['allow_cross_country'] and
@@ -419,6 +461,8 @@ class Monitor:
             nodes.append(dict(result, selectable=not reason, unavailable_reason=reason))
         for node_name in group.get('all', []):
             if node_name in seen or node_name == current or node_name == 'REJECT':
+                continue
+            if is_fake_node(node_name):
                 continue
             seen.add(node_name)
             reason = 'exit_occupied' if node_name in used else ''
@@ -434,6 +478,8 @@ class Monitor:
         if not self.run_lock.acquire(timeout=0.5):
             raise ValueError('health_check_busy')
         try:
+            if node and is_fake_node(node):
+                raise ValueError('fake_node_not_allowed')
             cfg = copy.deepcopy(self.cfg)
             slots = wb_settings.proxy_slots(self.hub.ACCOUNTS_DIR)
             slot = next((s for s in slots if s['id'] == sid), None)
@@ -510,7 +556,86 @@ class Monitor:
         blocked = [r['url'] for r in self.rows.values() if r.get('status') in
                    ('unavailable', 'switching') and r.get('url')]
         atomic_json(self.root / 'state.json', dict(enabled=self.cfg['enabled'],
-                    blocked=blocked, slots=self.rows, history=self.history[-100:], ranking=self.ranking))
+                    blocked=blocked, slots=self.rows, history=self.history[-100:],
+                    ranking=self.ranking, quarantined_exits=self.quarantined_exits))
+
+    def _is_quarantined(self, node_or_ip):
+        if not node_or_ip:
+            return False
+        now = time.time()
+        expire = self.quarantined_exits.get(node_or_ip, 0)
+        return expire > now
+
+    def _clean_quarantined(self):
+        now = time.time()
+        expired = [k for k, exp in self.quarantined_exits.items() if exp <= now]
+        for k in expired:
+            self.quarantined_exits.pop(k, None)
+
+    def report_risk_control(self, proxy, reason='11140', quarantine_seconds=86400):
+        if not proxy:
+            return False
+        slots = wb_settings.proxy_slots(self.hub.ACCOUNTS_DIR)
+        slot = next((s for s in slots if s.get('url') == proxy), None)
+        if not slot:
+            return False
+        sid = slot['id']
+        with self.lock:
+            cfg = copy.deepcopy(self.cfg)
+            if sid not in cfg.get('groups', {}) or not cfg.get('enabled'):
+                return False
+            rows = copy.deepcopy(self.rows)
+            row = rows.setdefault(sid, dict(id=sid, url=slot['url'], failures=0))
+            old_node = row.get('node') or row.get('ip_node') or ''
+            old_ip = row.get('ip') or slot.get('ip') or ''
+
+        if not old_node:
+            try:
+                live = self._api(cfg, '/proxies')['proxies']
+                group = cfg['groups'].get(sid)
+                if group in live:
+                    old_node = live[group].get('now', '')
+            except Exception:
+                pass
+
+        now = time.time()
+        expire = now + quarantine_seconds
+        with self.lock:
+            if old_node:
+                self.quarantined_exits[old_node] = expire
+            if old_ip:
+                self.quarantined_exits[old_ip] = expire
+            self._clean_quarantined()
+            row['status'] = 'switching'
+            row['error'] = 'risk_control_quarantined'
+            self._publish(rows)
+            self._record(sid, 'risk_control_' + reason, old_node=old_node, old_ip=old_ip)
+
+        if self.run_lock.acquire(timeout=2.0):
+            try:
+                live_slots = wb_settings.proxy_slots(self.hub.ACCOUNTS_DIR)
+                current_slot = next((s for s in live_slots if s['id'] == sid), slot)
+                proxy_map = self._api(cfg, '/proxies')['proxies']
+                providers = self._api(cfg, '/providers/proxies')['providers']
+                with self.lock:
+                    rows = copy.deepcopy(self.rows)
+                if cfg.get('ranked'):
+                    ranked = copy.deepcopy(self.ranking.get('ranked', []))
+                    candidates = [
+                        r for r in ranked
+                        if not self._is_quarantined(r.get('node')) and not self._is_quarantined(r.get('ip'))
+                    ]
+                    candidates = prioritize_same_region_candidates(candidates, current_slot, slow_ms=cfg.get('slow_ms', 1500))
+                    self._ranked_switch(cfg, current_slot, live_slots, proxy_map, rows, candidates, 'risk_control')
+                else:
+                    self._replace(cfg, current_slot, live_slots, proxy_map, providers, rows)
+            except Exception:
+                pass
+            finally:
+                self.run_lock.release()
+
+        self.wake.set()
+        return True
 
     def _record(self, slot, reason, **fields):
         item = dict(at=time.time(), slot=slot, reason=reason, **fields)
@@ -579,8 +704,12 @@ class Monitor:
                         try:
                             data = json.loads(p.read_text(encoding='utf-8'))
                             p.unlink()
-                            if time.time() - data.get('at', 0) < 120:
-                                self.notify(data.get('proxy'), TimeoutError())
+                            if p.name.endswith('_risk.json'):
+                                if time.time() - data.get('at', 0) < 120:
+                                    self.report_risk_control(data.get('proxy'), reason=data.get('reason', '11140'))
+                            else:
+                                if time.time() - data.get('at', 0) < 120:
+                                    self.notify(data.get('proxy'), TimeoutError())
                         except (OSError, ValueError):
                             pass
                     with self.lock:
@@ -689,7 +818,8 @@ class Monitor:
             production.update(proxy_map.get(group, {}).get('all', []))
         nodes = sorted({p['name'] for provider in providers.values()
                         if provider.get('vehicleType') in ('HTTP', 'File')
-                        for p in provider.get('proxies', []) if p.get('name') in allowed & production})
+                        for p in provider.get('proxies', [])
+                        if p.get('name') in allowed & production and not is_fake_node(p.get('name'))})
         original = spare.get('now')
         results, intel_cache = [], {}
         with self.lock:
@@ -700,6 +830,8 @@ class Monitor:
             for node in nodes:
                 if self.stop_event.is_set() or self.cfg != cfg or self.scan_cancel.is_set():
                     raise ValueError('scan_interrupted')
+                if self._is_quarantined(node) or is_fake_node(node):
+                    continue
                 try:
                     probe = self._candidate_probe(cfg, node)
                 except Exception:
@@ -707,6 +839,8 @@ class Monitor:
                 result = dict(probe, node=node, tested_at=time.time())
                 if probe['ok']:
                     ip = probe['ip']
+                    if self._is_quarantined(ip):
+                        continue
                     if ip not in intel_cache:
                         intel_cache[ip] = wb_ipintel.lookup(ip)
                     result.update(intel_cache[ip])
@@ -784,7 +918,10 @@ class Monitor:
         reserved = {rows[s['id']].get('ip') for s in slots
                     if (s not in targets or s.get('pinned') or rows[s['id']].get('pinned'))
                     and rows[s['id']].get('status') != 'unavailable'}
-        usable = [r for r in ranked if r['ip'] not in reserved]
+        usable = [r for r in ranked if r['ip'] not in reserved
+                  and not self._is_quarantined(r.get('node'))
+                  and not self._is_quarantined(r.get('ip'))
+                  and not is_fake_node(r.get('node'))]
         desired = usable[:len(targets)]
         desired_ips = {r['ip'] for r in desired}
         for slot in targets:
@@ -847,7 +984,9 @@ class Monitor:
             for candidate in candidates:
                 node = candidate['node']
                 if (node in used or candidate['ip'] in occupied
-                        or node not in proxy_map[group].get('all', [])):
+                        or node not in proxy_map[group].get('all', [])
+                        or self._is_quarantined(node)
+                        or self._is_quarantined(candidate.get('ip'))):
                     continue
                 if not cfg['allow_cross_country'] and (not slot.get('country_code') or
                         candidate.get('country_code') != slot['country_code']):
@@ -856,7 +995,9 @@ class Monitor:
                 try:
                     # Re-probe even cached candidates: a subscription's exit may rotate.
                     probe = self._candidate_probe(cfg, node)
-                    if not probe['ok'] or probe['ip'] in occupied or (reason != 'manual' and probe['ip'] != candidate['ip']):
+                    if (not probe['ok'] or probe['ip'] in occupied
+                            or self._is_quarantined(probe['ip'])
+                            or (reason != 'manual' and probe['ip'] != candidate['ip'])):
                         with self.lock:
                             for result in self.ranking.get('results', []):
                                 if result['node'] == node:
@@ -946,6 +1087,8 @@ class Monitor:
             for p in provider.get('proxies', []):
                 node = p.get('name')
                 if (node and node != old_node and node not in used_nodes
+                        and not self._is_quarantined(node)
+                        and not is_fake_node(node)
                         and node in production.get('all', []) and node in spare.get('all', [])
                         and node not in candidates):
                     candidates.append(node)
@@ -959,10 +1102,12 @@ class Monitor:
             for node in candidates[:cfg['candidate_limit']]:
                 if self.stop_event.is_set() or self.cfg != cfg:
                     return
+                if self._is_quarantined(node) or is_fake_node(node):
+                    continue
                 changed = False
                 try:
                     probe = self._candidate_probe(cfg, node)
-                    if not probe['ok'] or probe['ip'] in occupied:
+                    if not probe['ok'] or probe['ip'] in occupied or self._is_quarantined(probe['ip']):
                         continue
                     intel = wb_ipintel.lookup(probe['ip'])
                     if not cfg['allow_cross_country'] and (not old_country or intel['country_code'] != old_country):

@@ -279,6 +279,15 @@ def proxy_health_failure(proxy, error):
             pass  # Diagnostics must not mask the original upstream exception.
 
 
+def proxy_health_risk_control(proxy, reason="11140"):
+    """Notify proxy health monitor of upstream risk control (11140) on the proxy."""
+    if PROXY_HEALTH is not None and hasattr(PROXY_HEALTH, "report_risk_control"):
+        try:
+            PROXY_HEALTH.report_risk_control(proxy, reason=reason)
+        except Exception:
+            pass
+
+
 def opener_for_proxy(proxy):
     """Build (and cache) a urllib opener bound to one outbound proxy.
 
@@ -1001,6 +1010,15 @@ class Account(object):
         self.cooldown_until = 0.0
         # 运行时标记：上游返回 401 或 token 为空时置为 True，提示需重新登录
         self.token_expired = bool(not self.access_token)
+        self.resting_until = 0.0
+        self.last_rest_at = 0.0
+        self.req_count_since_rest = 0
+        self.probing = False
+        self.restricted_probes = 0
+        try:
+            self.restricted_probes = max(0, int(data.get("restrictedProbes") or 0))
+        except (TypeError, ValueError):
+            self.restricted_probes = 0
         # 上游账号级风控限制（403 / code 11140「账号存在异常行为，已被限制
         # 使用」）的解除时刻。与上面那些节流窗口不同，这一条**持久化**：上游的
         # 限制按小时到工作日计，网关重启 / 换身分 / 刷新 token 都不能让它重新
@@ -1193,6 +1211,7 @@ class Account(object):
             # note_restricted）。导出的文档会带上它供查看，导入侧
             # normalise_import_row() 不认这个字段，换机器不会把账号一起停掉。
             "restrictedUntil": self.restricted_until,
+            "restrictedProbes": self.restricted_probes,
             "credits": self.credits,
             # 账号档位（#505）。持久化：一天一次的计费摘要结论，重启后仍然
             # 有效；导入到另一台机器时按 VOLATILE_FIELDS 丢掉，不把上一台
@@ -1205,6 +1224,8 @@ class Account(object):
             # 持久化：6004 的恢复时间是上游给的事实，重启后仍然成立（见 __init__）。
             "modelCaps": {mid: dict(entry) for mid, entry in self.model_caps.items()},
         }
+
+    as_dict = to_dict
 
     def _throttle_snapshot(self, now):
         """Return one consistent view of account and per-model cooldowns."""
@@ -1287,6 +1308,8 @@ class Account(object):
             # 上游账号级风控限制（403 / 11140）：面板据此把账号标成「风控限制」
             # 而不是普通冷却，并提示去官方渠道申诉而不是换号重试。
             "restrictedFor": round(max(0.0, restricted - now)) or None,
+            "isResting": self.is_resting(now),
+            "restingFor": round(max(0.0, self.resting_until - now)) or None,
             "modelCooldowns": models,
             "softStreak": int(self.soft_streak),
             "unscopedStreak": int(self.unscoped_streak),
@@ -1754,6 +1777,25 @@ class Account(object):
             return False
         return True
 
+    def is_resting(self, now=None):
+        return self.resting_until > (now or time.time())
+
+    def is_restricted(self, now=None):
+        ts = now or time.time()
+        if self.restricted_until > ts:
+            return True
+        if self.restricted_until > 0 and (getattr(self, "probing", False) or self.restricted_probes > 0):
+            return True
+        return False
+
+    def is_free_model(self, model):
+        if not model:
+            return False
+        m = str(model).lower()
+        if "free" in m:
+            return True
+        return m in {x.lower() for x in (self.free_models or ())}
+
     def unavailable_reason(self, model=None):
         """这个账号此刻为什么接不了单；可用时返回空字符串。
 
@@ -1777,6 +1819,13 @@ class Account(object):
                 and wb_tiers.requires_pro(model, self.realm)):
             return "该模型仅限 PRO 账号"
         now = time.time()
+        if self.is_resting(now):
+            return "轮休冷却中 剩余 %s" % _human_left(self.resting_until - now)
+        if self.restricted_until > now:
+            streak = ("（复测失败第%d次）" % self.restricted_probes) if self.restricted_probes > 0 else ""
+            return "上游风控限制 剩余 %s%s" % (_human_left(self.restricted_until - now), streak)
+        if self.restricted_until > 0 and (getattr(self, "probing", False) or self.restricted_probes > 0):
+            return "上游风控限制（待复测验证）"
         # 四种惩罚的到期时间各走各的，谁把时间推得最远就报谁：只报「冷却」
         # 会让人往 429 的方向查，而实际可能是上游连续断连触发的熔断（30 分钟
         # 起，与账号本身无关），或者余额保护这类完全不同的原因。
@@ -1809,6 +1858,8 @@ class Account(object):
             return "凭证已过期"
         return ""
 
+    unusable_reason = unavailable_reason
+
     def model_disabled(self, model):
         """这个账号被人工禁用了该模型？空名单恒为 False。
 
@@ -1822,6 +1873,8 @@ class Account(object):
 
     def ready(self, model=None, refresh=True):
         if not self.enabled or not self.access_token or getattr(self, "token_expired", False):
+            return False
+        if self.is_restricted() or self.is_resting():
             return False
         if PROXY_HEALTH is not None and self.proxy and not PROXY_HEALTH.allow(self.proxy):
             return False
@@ -3689,6 +3742,7 @@ class Account(object):
         in between, so it never came back on its own.
         """
         with self._throttle_lock:
+            self.req_count_since_rest += 1
             if model:
                 self.model_cooldowns.pop(model, None)
                 self.model_cooldowns_at.pop(model, None)
@@ -3701,10 +3755,33 @@ class Account(object):
             self.breaker_until = 0.0
             self.degrade_until = 0.0
             self.restricted_until = 0.0
+            self.restricted_probes = 0
+            self.probing = False
             self.last_error = ""
             self.last_error_detail = ""
             self.cooldown_until = 0.0
             self.token_expired = False
+
+    def clear_restriction(self):
+        with self._throttle_lock:
+            self.restricted_until = 0.0
+            self.restricted_probes = 0
+            self.probing = False
+            self.last_error = ""
+            self.last_error_detail = ""
+
+    def note_restriction_probe_result(self, success, error_detail=""):
+        if success:
+            self.clear_restriction()
+        else:
+            with self._throttle_lock:
+                self.probing = False
+                self.restricted_probes += 1
+                steps = [2 * 3600, 6 * 3600, 12 * 3600, 24 * 3600, 48 * 3600, 72 * 3600]
+                wait = steps[min(self.restricted_probes, len(steps) - 1)]
+                self.restricted_until = time.time() + wait
+                self.last_error = "HTTP 403 (account restricted, probe backoff %ds)" % wait
+                self.last_error_detail = error_detail
 
     def throttle_wait(self, model=None):
         """Seconds until this account can serve `model` again (0 = right now)."""
@@ -4173,6 +4250,103 @@ class AccountPool(object):
         # uid 排序表的缓存：池成员没变就直接复用，变了重建（见 _page_ranks）。
         self._page_order_cache = None
         self.affinity = SessionAffinity()
+        self._free_models = {}
+        self._last_picked_slots = []
+
+    def apply_free_models(self, free_models):
+        """Update realm -> set of free model ids and push to accounts."""
+        if not isinstance(free_models, dict):
+            return
+        with self._lock:
+            self._free_models = {
+                realm: set(str(m).lower() for m in (models or ()))
+                for realm, models in free_models.items()
+            }
+            for account in self.accounts:
+                models = free_models.get(account.realm)
+                if models is not None:
+                    account.free_models = frozenset(str(m).lower() for m in (models or ()))
+
+    def is_free_model(self, model, realm=None):
+        """Check if a model is marked free in catalogue or accounts."""
+        if not model:
+            return False
+        m = str(model).lower()
+        if "free" in m:
+            return True
+        with self._lock:
+            if realm and realm in self._free_models:
+                if m in self._free_models[realm]:
+                    return True
+            for models in self._free_models.values():
+                if m in models:
+                    return True
+            return any(getattr(a, "is_free_model", a.model_is_free)(model) for a in self.accounts)
+
+    def update_rolling_rest(self, accounts_dir=None):
+        """Maintain the rolling rest queue with safety floor protections."""
+        directory = accounts_dir or getattr(self, "dir", "") or ""
+        cfg = wb_settings.rolling_rest_config(directory)
+        now = time.time()
+        with self._lock:
+            if not cfg.get("enabled", True):
+                for acc in self.accounts:
+                    if acc.resting_until > 0:
+                        acc.resting_until = 0.0
+                return
+
+            # 1. 遍历账号：到期自动恢复
+            for acc in self.accounts:
+                if acc.resting_until > 0 and now >= acc.resting_until:
+                    acc.resting_until = 0.0
+                    acc.last_rest_at = now
+                    acc.req_count_since_rest = 0
+
+            # 2. 安全底线（Safety Floor）与补充休眠，按 realm 分组处理
+            by_realm = {}
+            for acc in self.accounts:
+                by_realm.setdefault(acc.realm or "default", []).append(acc)
+
+            for realm, accs in by_realm.items():
+                eligible = [
+                    a for a in accs
+                    if a.enabled and a.access_token and not getattr(a, "token_expired", False)
+                    and not a.is_restricted(now) and a.breaker_until <= now
+                    and a.balance_until <= now
+                ]
+                total = len(eligible)
+                if total <= 2:
+                    allowed_rest = 0
+                    safe_min_active = total
+                else:
+                    safe_min_active = max(2, (total + 1) // 2)
+                    allowed_rest = min(cfg.get("count", 3), max(0, total - safe_min_active))
+
+                resting = [a for a in eligible if a.is_resting(now)]
+                active = [a for a in eligible if not a.is_resting(now)]
+
+                # 若活跃账号不足 safe_min_active，提前唤醒休眠账号（按剩余休眠时间最短优先唤醒）
+                if len(active) < safe_min_active and resting:
+                    needed_wake = safe_min_active - len(active)
+                    resting.sort(key=lambda a: a.resting_until)
+                    waking = resting[:needed_wake]
+                    for a in waking:
+                        a.resting_until = 0.0
+                        a.last_rest_at = now
+                        a.req_count_since_rest = 0
+                    resting = resting[needed_wake:]
+                    active.extend(waking)
+
+                # 若休眠账号不足 allowed_rest，补充休眠名额
+                if len(resting) < allowed_rest:
+                    needed_rest = allowed_rest - len(resting)
+                    candidates = [a for a in active if a.ready(refresh=False)]
+                    # 优先挑选 req_count_since_rest 最多、且 last_rest_at 最旧的账号
+                    candidates.sort(key=lambda a: (-getattr(a, "req_count_since_rest", 0),
+                                                   getattr(a, "last_rest_at", 0.0)))
+                    chosen = candidates[:needed_rest]
+                    for a in chosen:
+                        a.resting_until = now + cfg.get("minutes", 60) * 60
 
     def load(self):
         with self._lock:
@@ -4864,6 +5038,9 @@ class AccountPool(object):
         share. Accounts that lapse on the same day carry the same weight, so
         they keep taking turns.
         """
+        if model and (self.is_free_model(model, snapshot[0].realm if snapshot else None)
+                      or any(getattr(a, "is_free_model", a.model_is_free)(model) for a in snapshot)):
+            return None
         urgent = [a for a in snapshot if a.in_expiring_window()]
         if not urgent:
             return None
@@ -5033,19 +5210,38 @@ class AccountPool(object):
         with self._lock:
             start = (self._page_cursors.get(cursor_key, 0) if cursor_key is not None
                      else self._cursor)
+        candidates = []
         for offset in range(total):
             index = (start + offset) % total
             account = group[index]
             if account.uid in exclude:
                 continue
             if account.ready(model=model):
-                with self._lock:
-                    if cursor_key is not None:
-                        self._page_cursors[cursor_key] = (index + 1) % total
-                    else:
-                        self._cursor = (index + 1) % total
-                return account
-        return None
+                candidates.append((index, account))
+        if not candidates:
+            return None
+
+        # 出口槽位打散：若有多个可用账号，优先挑选代理槽位与上一请求不同的账号
+        picked_pair = candidates[0]
+        if len(candidates) > 1 and self._last_picked_slots:
+            last_slot = self._last_picked_slots[-1]
+            diff_slot = [pair for pair in candidates
+                         if (pair[1].proxy_slot or pair[1].proxy or "") != last_slot]
+            if diff_slot:
+                picked_pair = diff_slot[0]
+
+        index, picked = picked_pair
+        slot = picked.proxy_slot or picked.proxy or ""
+        self._last_picked_slots.append(slot)
+        if len(self._last_picked_slots) > 50:
+            self._last_picked_slots = self._last_picked_slots[-50:]
+
+        with self._lock:
+            if cursor_key is not None:
+                self._page_cursors[cursor_key] = (index + 1) % total
+            else:
+                self._cursor = (index + 1) % total
+        return picked
 
     def representative(self, realm=None):
         with self._lock:

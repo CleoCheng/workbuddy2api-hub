@@ -1556,6 +1556,20 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
   var ATTRS = ['title', 'placeholder', 'aria-label', 'data-label', 'alt'];
   var SKIP = {SCRIPT: 1, STYLE: 1, TEXTAREA: 1, NOSCRIPT: 1};
   var DICT = {
+    "轮休设置": "Rest settings",
+    "账号轮休设置": "Account Rolling Rest Settings",
+    "启用自动轮休机制": "Enable automatic rolling rest",
+    "每轮休息时长（分钟，默认 60）": "Rest duration per round (minutes, default 60)",
+    "同时休眠账号个数（默认 3）": "Max resting accounts (default 3)",
+    "保存设置": "Save settings",
+    "账号轮休设置已保存": "Rolling rest settings saved",
+    "轮休中": "Resting",
+    "账号轮休：": "Rolling rest: ",
+    "已启用": "Enabled",
+    "未启用": "Disabled",
+    "当前休眠中:": "Currently resting:",
+    "调整设置": "Adjust",
+    "风控限制": "Risk restricted",
     "全部设置": "All settings",
     "🔑 API Key 与访问": "🔑 API keys & access",
     "🌐 网络与代理": "🌐 Network & proxies",
@@ -4896,12 +4910,20 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
     <button class="sec" onclick="testAccounts(this)" title="逐个真发一条最小请求，并同时检查本机到上游的网络：能分清「账号坏了」和「本机断网了」，测试通过还会清掉该账号的熔断/降权计数">一键测试</button>
     </div>
     <div class="tb-group">
+    <button class="sec" id="btnRollingRest" onclick="openRollingRestModal()">轮休设置</button>
     <button class="sec" onclick="autoAssignSlots()" title="把尚未绑定出口的已启用国际版账号依次分配到已启用的代理槽；国内版默认直连，已有绑定的账号不受影响">一键分配代理</button>
     <button class="sec" id="btnProductAll" onclick="cycleAllProducts(this)" title="把全部账号（含另一个版本）的出站身份切到下一个：WB → VSC → CLI">一键切换所有出站身份：<span id="productAllLabel">WB</span></button>
     <button class="sec" onclick="setAll(true, this)">全部启用</button>
     <button class="sec" onclick="setAll(false, this)">全部停用</button>
     </div>
   </div>
+      <div id="rollingRestBanner" class="legend" style="margin: 8px 0 12px; display:flex; align-items:center; justify-content:space-between; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:12px;">
+        <div id="rollingRestStatusText">
+          <span>账号轮休：<b id="rollingRestStateLabel">已启用</b> (每轮休息 <span id="rollingRestMinDisplay">60</span> 分钟，最多 <span id="rollingRestCountDisplay">3</span> 个账号同时轮休)</span>
+          <span style="margin-left:12px; color:var(--dim)">当前休眠中: <b id="rollingRestActiveCount" style="color:var(--warn)">0</b> 个</span>
+        </div>
+        <button class="sec sm" onclick="openRollingRestModal()" style="font-size:12px; padding:3px 10px;">调整设置</button>
+      </div>
     <div class="acct-filter-bar">
       <div class="acct-search-box">
         <svg class="acct-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -6692,6 +6714,42 @@ button.page-nav-top:hover{background:var(--panel2);border-color:var(--accent);co
 
   <footer>每 5 秒自动刷新 · 数据来自本机反代 <span class="mono" id="logfile"></span></footer>
 </main>
+
+<div class="modal-bg modal-mask" id="modalRollingRest" style="display:none" onclick="if(event.target===this)closeRollingRestModal()" onkeydown="if(event.key==='Escape')closeRollingRestModal()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rollingRestTitle" style="width:min(500px,96vw)">
+    <div class="modal-hd">
+      <h2 id="rollingRestTitle">账号轮休设置</h2>
+      <button class="modal-x" onclick="closeRollingRestModal()" aria-label="关闭">×</button>
+    </div>
+    <div class="modal-bd">
+      <p class="hint" style="font-size:12px; color:var(--dim); margin-bottom:14px;">
+        通过周期性滚动轮流休眠账号，降低单一账号调用频次，防止被上游频控模型识别。号池拥有安全底线保护，可用账号过少时会自动暂停休眠以保证业务不断流。
+      </p>
+      <div style="margin-bottom:14px;">
+        <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
+          <input id="setRollingRestEnabled" type="checkbox" style="width:16px;height:16px" checked>
+          <span>启用自动轮休机制</span>
+        </label>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:12px; margin-bottom:18px;">
+        <div>
+          <label style="display:block; font-size:12px; color:var(--dim); margin-bottom:4px;">每轮休息时长（分钟，默认 60）</label>
+          <input id="setRollingRestMinutes" type="number" min="5" max="1440" step="5" value="60"
+                 style="width:100%; background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--fg); font:inherit">
+        </div>
+        <div>
+          <label style="display:block; font-size:12px; color:var(--dim); margin-bottom:4px;">同时休眠账号个数（默认 3）</label>
+          <input id="setRollingRestCount" type="number" min="1" max="20" step="1" value="3"
+                 style="width:100%; background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:8px 10px; color:var(--fg); font:inherit">
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button class="sec" onclick="closeRollingRestModal()">取消</button>
+        <button class="primary" onclick="saveRollingRestSettings(this)">保存设置</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="modal-mask" id="proxyNodeModal" onkeydown="if(event.key==='Escape')closeProxyNodeModal()">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="proxyNodeTitle" style="width:min(960px,96vw)">
@@ -9919,6 +9977,8 @@ function accountRow(a){
                  ? '<span class="badge off" title="不接 API 流量，但仍参与签到 / 任务">已停用 · 任务中</span>'
                  : '<span class="badge off">已停用</span>')
               : isTokenBad ? '<span class="badge bad" title="登录凭证已失效（上游返回 401 或已过期），请重新登录">凭证失效</span>'
+              : a.restrictedFor ? '<span class="badge bad" title="上游风控限制（403 11140），' + fmtLeft(a.restrictedFor) + '后复测">风控限制 ' + fmtLeft(a.restrictedFor) + '</span>'
+              : a.isResting ? '<span class="badge warn" title="账号轮休冷却中，' + fmtLeft(a.restingFor) + '后自动唤醒">轮休中 ' + fmtLeft(a.restingFor) + '</span>'
               : a.reserveBlocked ? '<span class="badge warn">保留积分</span>'
               : a.dailyLimitBlocked ? '<span class="badge warn" title="今日已用 ' + fmt(a.dailyTokensToday || 0) + ' / ' + fmt(a.dailyTokenLimit || 0) + ' token，暂停接单（本地 0 点恢复）">日限额</span>'
               : a.creditLimitReached ? '<span class="badge warn" title="今日已消费 ' + Number(a.dailyCreditsToday || 0).toFixed(2) + ' / ' + (a.dailyCreditLimit || 0) + ' 积分，仅免费模型可用（本地 0 点恢复）">积分限额</span>'
@@ -10458,6 +10518,7 @@ function renderAccounts(){
   // 表下不再堆两行说明图例（出站身份解释留在每行身份按钮组的悬停提示里，
   // 轮询/粘性说明挂到「账号列表」标题上），表格底部保持干净。
   applyTableSort('accounts');
+  if(typeof renderRollingRestStatus === 'function') renderRollingRestStatus();
   if(typeof filterAccountsList === 'function') filterAccountsList();
 }
 
@@ -11009,6 +11070,86 @@ function openImport(){
     readImportFile(f);
   };
   picker.click();
+}
+
+var _rollingRestConfig = {enabled: true, minutes: 60, count: 3};
+
+function renderRollingRestStatus(){
+  const cfg = _rollingRestConfig || {enabled: true, minutes: 60, count: 3};
+  const label = document.getElementById('rollingRestStateLabel');
+  if(label){
+    label.textContent = cfg.enabled ? '已启用' : '未启用';
+    label.style.color = cfg.enabled ? 'var(--accent2)' : 'var(--dim)';
+  }
+  const minDisp = document.getElementById('rollingRestMinDisplay');
+  if(minDisp) minDisp.textContent = String(cfg.minutes != null ? cfg.minutes : 60);
+  const cntDisp = document.getElementById('rollingRestCountDisplay');
+  if(cntDisp) cntDisp.textContent = String(cfg.count != null ? cfg.count : 3);
+  const activeCountEl = document.getElementById('rollingRestActiveCount');
+  if(activeCountEl){
+    const restingCount = (typeof accountsInView === 'function')
+      ? accountsInView().filter(a => !!a.isResting).length
+      : 0;
+    activeCountEl.textContent = String(restingCount);
+  }
+}
+
+function openRollingRestModal(){
+  const cfg = _rollingRestConfig || {enabled: true, minutes: 60, count: 3};
+  const enInput = document.getElementById('setRollingRestEnabled');
+  const minInput = document.getElementById('setRollingRestMinutes');
+  const cntInput = document.getElementById('setRollingRestCount');
+  if(enInput) enInput.checked = !!cfg.enabled;
+  if(minInput) minInput.value = String(cfg.minutes != null ? cfg.minutes : 60);
+  if(cntInput) cntInput.value = String(cfg.count != null ? cfg.count : 3);
+  const m = document.getElementById('modalRollingRest');
+  if(m){
+    m.style.display = 'flex';
+    m.classList.add('show');
+  }
+}
+
+function closeRollingRestModal(){
+  const m = document.getElementById('modalRollingRest');
+  if(m){
+    m.style.display = 'none';
+    m.classList.remove('show');
+  }
+}
+
+async function saveRollingRestSettings(btn){
+  const enInput = document.getElementById('setRollingRestEnabled');
+  const minInput = document.getElementById('setRollingRestMinutes');
+  const cntInput = document.getElementById('setRollingRestCount');
+  const enabled = enInput ? !!enInput.checked : true;
+  const minutes = parseInt(minInput ? minInput.value : 60, 10);
+  const count = parseInt(cntInput ? cntInput.value : 3, 10);
+  if(isNaN(minutes) || minutes < 5 || minutes > 1440){
+    toast('每轮休息时长必须为 5 到 1440 分钟之间的整数', 'bad');
+    return;
+  }
+  if(isNaN(count) || count < 1 || count > 20){
+    toast('同时休眠账号个数必须为 1 到 20 之间的整数', 'bad');
+    return;
+  }
+  const oldText = btn ? btn.textContent : '';
+  if(btn){
+    btn.disabled = true;
+    btn.textContent = '保存中...';
+  }
+  try {
+    await postJSON('/settings/save', { rolling_rest: { enabled, minutes, count } });
+    toast('账号轮休设置已保存', 'ok');
+    closeRollingRestModal();
+    if(typeof loadSettings === 'function') await loadSettings();
+  } catch(e){
+    toast('保存失败: ' + (e.message || e), 'bad');
+  } finally {
+    if(btn){
+      btn.disabled = false;
+      btn.textContent = oldText;
+    }
+  }
 }
 
 function openApiKeyModal(){
@@ -13449,6 +13590,10 @@ async function loadSettings(showToast){
               + (typeof usageDayKeep === 'number' ? usageDayKeep : 32) + ' 天)';
         usageKeepState.style.color = isDefault ? 'var(--dim)' : 'var(--accent2)';
       }
+    if(data.rolling_rest && typeof data.rolling_rest === 'object'){
+      _rollingRestConfig = Object.assign({}, _rollingRestConfig, data.rolling_rest);
+    }
+    renderRollingRestStatus();
     if(typeof restoreSettingsCategory === 'function') restoreSettingsCategory();
     if(showToast) toast('设置已刷新', 'ok');
   } catch(e) {
@@ -16424,6 +16569,14 @@ function proxyAdminError(error){
     subscription_name_invalid:'订阅名称只能包含文字、数字、下划线或短横线，最长 40 个字符。',
     subscription_interval_or_enabled_invalid:'订阅刷新间隔必须为 5 分钟至 30 天。',
     subscription_apply_failed_rolled_back:'订阅应用失败，已恢复原配置。请检查地址和订阅格式。',
+    subscription_source_blocked:'订阅服务拒绝了服务器出口（403），已自动尝试本地代理仍失败。请换用服务器可达的订阅地址。',
+    subscription_source_not_found:'订阅地址已失效（404）。请到服务商后台重新复制订阅链接。',
+    subscription_source_unreachable:'服务器无法访问该订阅地址，请检查域名或稍后重试。',
+    subscription_source_http_error:'订阅服务返回异常状态，请稍后重试。',
+    subscription_format_unsupported:'订阅内容中没有可识别的节点，请确认链接返回 Clash / YAML 格式。',
+    subscription_empty:'订阅返回 0 个节点，请确认该订阅仍然有效。',
+    subscription_too_large:'订阅内容超过 10 MB，已拒绝。',
+    subscription_publish_failed:'订阅内容已获取，但写入本地托管目录失败。',
     subscription_refresh_failed:'订阅刷新失败，请检查服务商状态。',
     subscription_config_validation_failed:'订阅配置验证失败，原配置保持不变。',
     at_least_one_subscription_required:'出口组至少需要保留一个启用的订阅。',
