@@ -16105,9 +16105,10 @@ def probe_account(account, model=None, timeout=30, record_wave=False):
             # 测试也认账号级风控限制：不能用 60 秒的普通冷却把 2 小时覆盖掉，
             # 更不能用「测试通过」的语义把被限制的账号放回池子（见 #422）。
             # 一并记连坐事件：一键测试正好是发现「整池被清扫」的入口。
+            was_restricted = account.is_restricted()
             account.note_restricted(detail=detail)
             _persist_restriction(account)
-            if account.proxy:
+            if (record_wave or not was_restricted) and account.proxy:
                 wb_accounts.proxy_health_risk_control(account.proxy, reason="11140")
             if record_wave:
                 note_account_restriction(account.realm, account.uid)

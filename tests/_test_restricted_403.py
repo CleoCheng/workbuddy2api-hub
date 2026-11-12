@@ -363,6 +363,43 @@ class Restricted403DispatchTests(unittest.TestCase):
         finally:
             wb_accounts.urlopen = real_urlopen
 
+    def test_probe_account_already_restricted_skips_proxy_risk_control(self):
+        acc = make_account("p_reprobe")
+        acc.proxy = "http://127.0.0.1:8080"
+        calls = []
+        old_risk_control = wb_accounts.proxy_health_risk_control
+        wb_accounts.proxy_health_risk_control = lambda proxy, reason="11140": calls.append((proxy, reason))
+        real_urlopen = wb_accounts.urlopen
+        upstream = ScriptedUpstream([http_error(403, RESTRICT_BODY),
+                                     http_error(403, RESTRICT_BODY),
+                                     http_error(403, RESTRICT_BODY)])
+        wb_accounts.urlopen = upstream
+        try:
+            # 1. 未受限账号调用 probe_account(..., record_wave=False) 命中 403 11140 会调用 proxy_health_risk_control
+            self.assertFalse(acc.is_restricted())
+            self.assertEqual(acc.restricted_until, 0.0)
+            res1 = P.probe_account(acc, record_wave=False)
+            self.assertTrue(res1.get("restricted"))
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0][0], "http://127.0.0.1:8080")
+
+            # 2. 账号已经受限（restricted_until > 0），再次调用 probe_account(..., record_wave=False)
+            #    命中 403 11140 时不重复调用 proxy_health_risk_control，防止把健康的 proxy 槽位误进隔离
+            self.assertTrue(acc.is_restricted())
+            self.assertGreater(acc.restricted_until, 0)
+            res2 = P.probe_account(acc, record_wave=False)
+            self.assertTrue(res2.get("restricted"))
+            self.assertEqual(len(calls), 1,
+                             "Already-restricted account reprobe must not trigger proxy_health_risk_control")
+
+            # 3. 若 record_wave=True（如面板主动一键重测），即便已经受限也会调用
+            res3 = P.probe_account(acc, record_wave=True)
+            self.assertTrue(res3.get("restricted"))
+            self.assertEqual(len(calls), 2)
+        finally:
+            wb_accounts.urlopen = real_urlopen
+            wb_accounts.proxy_health_risk_control = old_risk_control
+
     def test_dismiss_account_restriction(self):
         first = make_account("d1")
         second = make_account("d2")
