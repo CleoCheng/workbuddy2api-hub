@@ -12,6 +12,7 @@ import os
 import threading
 import time
 import random
+import urllib.error
 import wb_tasks
 import wb_quota_scan
 import wb_settings
@@ -237,7 +238,7 @@ class Scheduler:
             now = time.time()
             candidates = []
             for acc in getattr(self.pool, "accounts", []):
-                if acc.restricted_until > 0 and now >= acc.restricted_until:
+                if acc.enabled and acc.restricted_until > 0 and now >= acc.restricted_until:
                     candidates.append(acc)
             for acc in candidates:
                 if self._stop_event.is_set():
@@ -245,19 +246,49 @@ class Scheduler:
                 acc.probing = True
                 self.log(f"开始复测受限账号: {acc.uid[:8]}")
                 try:
-                    if getattr(acc, "is_api_key", False):
-                        ok = bool(acc.fetch_credits())
-                    else:
-                        ok = acc.refresh()
-                    if ok:
-                        acc.note_restriction_probe_result(True)
-                        acc.save(getattr(self.pool, "dir", ""))
-                        self.log(f"受限账号 {acc.uid[:8]} 复测成功，已恢复入池")
-                    else:
+                    if hasattr(self, "probe_fn") and callable(self.probe_fn):
+                        ok = self.probe_fn(acc)
                         detail = getattr(acc, "last_error_detail", "") or getattr(acc, "last_error", "")
-                        acc.note_restriction_probe_result(False, detail)
-                        acc.save(getattr(self.pool, "dir", ""))
-                        self.log(f"受限账号 {acc.uid[:8]} 复测未通过，退避至 {int(acc.restricted_until)}")
+                        if ok:
+                            acc.note_restriction_probe_result(True)
+                            self.log(f"受限账号 {acc.uid[:8]} 复测成功，已恢复入池")
+                        else:
+                            acc.note_restriction_probe_result(False, detail)
+                            self.log(f"受限账号 {acc.uid[:8]} 复测未通过，退避至 {int(acc.restricted_until)}")
+                    elif "refresh" in getattr(acc, "__dict__", {}) or "fetch_credits" in getattr(acc, "__dict__", {}):
+                        if getattr(acc, "is_api_key", False):
+                            ok = bool(acc.fetch_credits())
+                        else:
+                            ok = acc.refresh()
+                        if ok:
+                            acc.note_restriction_probe_result(True)
+                            self.log(f"受限账号 {acc.uid[:8]} 复测成功，已恢复入池")
+                        else:
+                            detail = getattr(acc, "last_error_detail", "") or getattr(acc, "last_error", "")
+                            acc.note_restriction_probe_result(False, detail)
+                            self.log(f"受限账号 {acc.uid[:8]} 复测未通过，退避至 {int(acc.restricted_until)}")
+                    else:
+                        proxy_mod = _proxy_module()
+                        if hasattr(proxy_mod, "probe_account"):
+                            res = proxy_mod.probe_account(acc, record_wave=False)
+                            if res.get("ok"):
+                                acc.note_restriction_probe_result(True)
+                                self.log(f"受限账号 {acc.uid[:8]} 复测成功，已恢复入池")
+                            elif res.get("network"):
+                                acc.probing = False
+                                acc.restricted_until = time.time() + 300
+                                if getattr(acc, "path", ""):
+                                    try:
+                                        acc.save(os.path.dirname(acc.path))
+                                    except Exception:
+                                        pass
+                                self.log(f"受限账号 {acc.uid[:8]} 复测网络异常，将在5分钟后重试")
+                            else:
+                                err = str(res.get("error") or "")
+                                acc.note_restriction_probe_result(False, err)
+                                self.log(f"受限账号 {acc.uid[:8]} 复测未通过 ({err})，退避至 {int(acc.restricted_until)}")
+                        else:
+                            acc.probing = False
                 except urllib.error.HTTPError as exc:
                     detail = ""
                     try:
@@ -266,7 +297,6 @@ class Scheduler:
                         pass
                     if exc.code == 403 and ("11140" in detail or "restricted" in detail.lower()):
                         acc.note_restriction_probe_result(False, detail)
-                        acc.save(getattr(self.pool, "dir", ""))
                         self.log(f"受限账号 {acc.uid[:8]} 复测仍受限 (11140)，退避至 {int(acc.restricted_until)}")
                     else:
                         acc.probing = False
@@ -274,6 +304,13 @@ class Scheduler:
                 except Exception as exc:
                     acc.probing = False
                     self.log(f"受限账号 {acc.uid[:8]} 复测异常: {exc}")
+                finally:
+                    acc.probing = False
+                    if getattr(self.pool, "dir", None) and not getattr(acc, "path", None):
+                        try:
+                            acc.save(self.pool.dir)
+                        except Exception:
+                            pass
         except Exception as exc:
             self.log(f"受限探针工作线程异常: {exc}")
 

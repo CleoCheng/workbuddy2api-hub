@@ -324,6 +324,55 @@ class Restricted403DispatchTests(unittest.TestCase):
         self.assertEqual(resp[1].uid, "f2")
         self.assertEqual(flaky.fails, 1)
 
+    def test_disabling_restricted_account_lifts_pool_hold(self):
+        first = make_account("a1")
+        second = make_account("b1")
+        P.POOL = StubPool([first, second])
+        upstream = ScriptedUpstream([http_error(403, RESTRICT_BODY),
+                                     http_error(403, RESTRICT_BODY)])
+        real_urlopen = wb_accounts.urlopen
+        wb_accounts.urlopen = upstream
+        try:
+            with self.assertRaises(P.ContentRejected):
+                P.open_upstream(dict(PAYLOAD), target_realm="intl")
+            with self.assertRaises(P.ContentRejected):
+                P.open_upstream(dict(PAYLOAD), target_realm="intl")
+            self.assertGreater(P.restriction_hold_remaining("intl"), 1700)
+
+            # 停用其中一个受限账号，整池暂停立即自动解除
+            first.enabled = False
+            self.assertEqual(P.restriction_hold_remaining("intl"), 0.0)
+        finally:
+            wb_accounts.urlopen = real_urlopen
+
+    def test_probe_account_default_does_not_trigger_wave_hold(self):
+        first = make_account("p1")
+        second = make_account("p2")
+        P.POOL = StubPool([first, second])
+        upstream = ScriptedUpstream([http_error(403, RESTRICT_BODY),
+                                     http_error(403, RESTRICT_BODY)])
+        real_urlopen = wb_accounts.urlopen
+        wb_accounts.urlopen = upstream
+        try:
+            res1 = P.probe_account(first)
+            res2 = P.probe_account(second)
+            self.assertTrue(res1.get("restricted"))
+            self.assertTrue(res2.get("restricted"))
+            # 默认 record_wave=False，不触发整池暂停
+            self.assertEqual(P.restriction_hold_remaining("intl"), 0.0)
+        finally:
+            wb_accounts.urlopen = real_urlopen
+
+    def test_dismiss_account_restriction(self):
+        first = make_account("d1")
+        second = make_account("d2")
+        P.POOL = StubPool([first, second])
+        P.note_account_restriction("intl", "d1")
+        P.note_account_restriction("intl", "d2")
+        self.assertGreater(P.restriction_hold_remaining("intl"), 1700)
+        P.dismiss_account_restriction(uid="d1")
+        self.assertEqual(P.restriction_hold_remaining("intl"), 0.0)
+
 
 class IdentityOnRetryTests(unittest.TestCase):
     """换号重试时的出站身份语义（官方 CLI 2.168.2 对齐）。"""
@@ -443,8 +492,15 @@ class RestrictionPersistenceTests(unittest.TestCase):
     def test_restriction_expires_on_its_own(self):
         account = self._restricted()
         account.restricted_until = time.time() - 1
-        self.assertTrue(account.ready())
+        # 冷却到期后账号不自动回池，必须保持在「待复测」状态
+        self.assertFalse(account.ready())
+        self.assertIn("待复测", account.unavailable_reason())
         self.assertEqual(account.throttle_wait(), 0.0)
+
+        # 显式复测成功清除受限标记后，才恢复 ready
+        account.note_restriction_probe_result(True)
+        self.assertTrue(account.ready())
+        self.assertEqual(account.restricted_until, 0.0)
 
     def test_repeated_detection_does_not_extend_the_window(self):
         account = self._restricted()

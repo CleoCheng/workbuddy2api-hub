@@ -14646,10 +14646,43 @@ def reset_restriction_state():
         _RESTRICTION_HOLD.clear()
 
 
+def dismiss_account_restriction(uid=None, realm=None):
+    """When an operator disables or deletes an account, remove it from
+    restriction wave events and lift any active hold on that realm."""
+    with _RESTRICTION_LOCK:
+        if uid:
+            for r, ev in list(_RESTRICTION_EVENTS.items()):
+                if uid in ev:
+                    ev.pop(uid, None)
+                    if len(ev) < RESTRICTION_WAVE_MIN:
+                        _RESTRICTION_HOLD.pop(r, None)
+        if realm:
+            _RESTRICTION_HOLD.pop(realm, None)
+        if not uid and not realm:
+            _RESTRICTION_HOLD.clear()
+            _RESTRICTION_EVENTS.clear()
+
+
 def restriction_hold_remaining(realm, now=None):
     """该区域整池暂停还剩多少秒（0 = 没有暂停）。"""
     now = time.time() if now is None else now
     with _RESTRICTION_LOCK:
+        if POOL is not None and getattr(POOL, "accounts", None) is not None:
+            events = _RESTRICTION_EVENTS.get(realm)
+            if events:
+                for uid in list(events.keys()):
+                    acc = None
+                    if hasattr(POOL, "get") and callable(POOL.get):
+                        acc = POOL.get(uid)
+                    elif hasattr(POOL, "accounts"):
+                        for a in getattr(POOL, "accounts", []):
+                            if getattr(a, "uid", None) == uid:
+                                acc = a
+                                break
+                    if (acc is not None and not getattr(acc, "enabled", True)) or (acc is None and hasattr(POOL, "accounts")):
+                        events.pop(uid, None)
+                if len(events) < RESTRICTION_WAVE_MIN:
+                    _RESTRICTION_HOLD.pop(realm, None)
         return max(0.0, _RESTRICTION_HOLD.get(realm, 0.0) - now)
 
 
@@ -15996,7 +16029,7 @@ def probe_local_network(realm):
     info["error"] = "没有可用的解析结果"
     return info
 
-def probe_account(account, model=None, timeout=30):
+def probe_account(account, model=None, timeout=30, record_wave=False):
     """给一个账号发一条最小请求，返回一行结果；成功即清掉它的本地惩罚。
 
     单个「测试」与「一键测试」共用这一份：两边各写一套的话，早晚一边忘了清计数、
@@ -16042,7 +16075,10 @@ def probe_account(account, model=None, timeout=30):
             # ladder from it. Only the tested model's cooldown is dropped here -
             # sibling models keep theirs, and a 402 balance park keeps its own lift
             # path (revive_balance_cooldown on a credits refresh).
+            was_restricted = account.restricted_until > 0
             account.note_success(model=model)
+            if was_restricted:
+                account.clear_restriction()
             row["ok"] = True
             return row
     except urllib.error.HTTPError as exc:
@@ -16073,7 +16109,8 @@ def probe_account(account, model=None, timeout=30):
             _persist_restriction(account)
             if account.proxy:
                 wb_accounts.proxy_health_risk_control(account.proxy, reason="11140")
-            note_account_restriction(account.realm, account.uid)
+            if record_wave:
+                note_account_restriction(account.realm, account.uid)
             row["restricted"] = True
             row["fails"] = int(account.fails)
             return row
@@ -22563,6 +22600,8 @@ class Handler(BaseHTTPRequestHandler):
             updated = POOL.set_enabled(uid, bool(payload.get("enabled")))
             if updated is None:
                 return self._error(404, "no such account")
+            if not payload.get("enabled"):
+                dismiss_account_restriction(uid=uid)
             log("account %s %s"
                 % (uid[:8], "enabled" if payload.get("enabled") else "disabled"))
         if "tasksEnabled" in payload:
@@ -22606,13 +22645,17 @@ class Handler(BaseHTTPRequestHandler):
         return self._json_panel(200, {"account": updated})
 
     def _route_accounts_set_all(self, payload):
-        POOL.set_all_enabled(bool(payload.get("enabled")))
+        enabled = bool(payload.get("enabled"))
+        POOL.set_all_enabled(enabled)
+        if not enabled:
+            dismiss_account_restriction()
         return self._json_panel(200, {"accounts": account_views()})
 
     def _route_accounts_delete(self, payload):
         uid = payload.get("uid")
         if not uid:
             return self._error(400, "uid required")
+        dismiss_account_restriction(uid=uid)
         removed = POOL.remove(uid)
         log("account %s deleted" % uid[:8])
         return self._json_panel(200, {"deleted": removed, "accounts": account_views()})

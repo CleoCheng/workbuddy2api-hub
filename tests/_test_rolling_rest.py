@@ -18,6 +18,7 @@ if ROOT not in sys.path:
 
 import wb_accounts
 import wb_proxy_health
+import wb_scheduler
 import wb_settings
 
 
@@ -249,6 +250,68 @@ class RestrictionProbeBackoffTests(unittest.TestCase):
         self.assertEqual(acc.restricted_probes, 0)
         self.assertEqual(acc.restricted_until, 0.0)
         self.assertFalse(acc.is_restricted())
+
+    def test_restriction_probe_worker_skips_disabled(self):
+        now = time.time()
+        acc = wb_accounts.Account({
+            "uid": "acc_probe_disabled",
+            "accessToken": "tok_valid",
+            "expiresAt": now + 3600,
+            "enabled": False,
+        })
+        acc.restricted_until = now - 100
+        probed = []
+        class MockPool:
+            accounts = [acc]
+            dir = ""
+        sched = wb_scheduler.Scheduler(MockPool())
+        sched.probe_fn = lambda a: probed.append(a.uid) or True
+        sched._restriction_probe_worker()
+        self.assertEqual(probed, [])
+        self.assertEqual(acc.restricted_until, now - 100)
+
+    def test_restriction_probe_worker_success(self):
+        now = time.time()
+        acc = wb_accounts.Account({
+            "uid": "acc_probe_ok",
+            "accessToken": "tok_valid",
+            "expiresAt": now + 3600,
+            "enabled": True,
+        })
+        acc.restricted_until = now - 100
+        acc.restricted_probes = 1
+        class MockPool:
+            accounts = [acc]
+            dir = ""
+        sched = wb_scheduler.Scheduler(MockPool())
+        sched.probe_fn = lambda a: True
+        sched._restriction_probe_worker()
+        self.assertEqual(acc.restricted_until, 0.0)
+        self.assertEqual(acc.restricted_probes, 0)
+        self.assertFalse(acc.is_restricted())
+
+    def test_restriction_probe_worker_network_error(self):
+        from unittest import mock
+        now = time.time()
+        acc = wb_accounts.Account({
+            "uid": "acc_probe_net",
+            "accessToken": "tok_valid",
+            "expiresAt": now + 3600,
+            "enabled": True,
+        })
+        acc.restricted_until = now - 100
+        acc.restricted_probes = 1
+        class MockPool:
+            accounts = [acc]
+            dir = ""
+        sched = wb_scheduler.Scheduler(MockPool())
+        with mock.patch("wb_scheduler._proxy_module") as mock_proxy:
+            mock_mod = mock.MagicMock()
+            mock_mod.probe_account.return_value = {"ok": False, "network": True, "error": "timeout"}
+            mock_proxy.return_value = mock_mod
+            sched._restriction_probe_worker()
+        self.assertEqual(acc.restricted_probes, 1)  # 不增加失败计数
+        self.assertGreater(acc.restricted_until, now + 200)  # 推迟 300 秒
 
 
 class FakeNodeFilterTests(unittest.TestCase):

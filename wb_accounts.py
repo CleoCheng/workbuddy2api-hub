@@ -1781,12 +1781,7 @@ class Account(object):
         return self.resting_until > (now or time.time())
 
     def is_restricted(self, now=None):
-        ts = now or time.time()
-        if self.restricted_until > ts:
-            return True
-        if self.restricted_until > 0 and (getattr(self, "probing", False) or self.restricted_probes > 0):
-            return True
-        return False
+        return self.restricted_until > 0
 
     def is_free_model(self, model):
         if not model:
@@ -1824,7 +1819,7 @@ class Account(object):
         if self.restricted_until > now:
             streak = ("（复测失败第%d次）" % self.restricted_probes) if self.restricted_probes > 0 else ""
             return "上游风控限制 剩余 %s%s" % (_human_left(self.restricted_until - now), streak)
-        if self.restricted_until > 0 and (getattr(self, "probing", False) or self.restricted_probes > 0):
+        if self.restricted_until > 0:
             return "上游风控限制（待复测验证）"
         # 四种惩罚的到期时间各走各的，谁把时间推得最远就报谁：只报「冷却」
         # 会让人往 429 的方向查，而实际可能是上游连续断连触发的熔断（30 分钟
@@ -3769,6 +3764,11 @@ class Account(object):
             self.probing = False
             self.last_error = ""
             self.last_error_detail = ""
+        if getattr(self, "path", ""):
+            try:
+                self.save(os.path.dirname(self.path))
+            except Exception:
+                pass
 
     def note_restriction_probe_result(self, success, error_detail=""):
         if success:
@@ -3782,6 +3782,11 @@ class Account(object):
                 self.restricted_until = time.time() + wait
                 self.last_error = "HTTP 403 (account restricted, probe backoff %ds)" % wait
                 self.last_error_detail = error_detail
+            if getattr(self, "path", ""):
+                try:
+                    self.save(os.path.dirname(self.path))
+                except Exception:
+                    pass
 
     def throttle_wait(self, model=None):
         """Seconds until this account can serve `model` again (0 = right now)."""
